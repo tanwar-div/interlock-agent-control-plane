@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interlock — Agent Control Plane</title>
+<style>
+:root{
+  --bg:#0b0e14; --panel:#11151f; --panel-2:#161b28; --line:#222b3d;
+  --ink:#e6ebf5; --muted:#8a97ad; --dim:#5d6982;
+  --accent:#5b9cff; --ok:#3fb950; --warn:#d29922; --high:#f0883e; --crit:#f85149;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;letter-spacing:-.2px;font-size:15px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.sub{color:var(--dim);font-size:12px;font-weight:400}
+header .spacer{flex:1}
+.stat{display:flex;flex-direction:column;align-items:flex-end;font-size:11px;color:var(--dim)}
+.stat b{color:var(--ink);font-size:13px;font-weight:600;font-family:var(--mono)}
+main{display:grid;grid-template-columns:330px 1fr 380px;gap:0;height:calc(100vh - 57px)}
+.col{overflow-y:auto;padding:16px}
+.col+.col{border-left:1px solid var(--line)}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);margin:0 0 10px;font-weight:600}
+h2 .count{color:var(--dim);font-weight:400}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:9px;cursor:pointer;transition:border-color .15s,background .15s}
+.card:hover{border-color:#33405c;background:var(--panel-2)}
+.card.sel{border-color:var(--accent);background:var(--panel-2)}
+.card .t{font-weight:600;margin-bottom:5px;font-size:13.5px}
+.card .m{color:var(--muted);font-size:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:650;letter-spacing:.4px;text-transform:uppercase;font-family:var(--mono)}
+.s-RECEIVED,.s-TRIAGING{background:#1f2a3d;color:#7aa2d6}
+.s-INVESTIGATING,.s-PLANNING{background:#1e2f45;color:#5b9cff}
+.s-AWAITING_APPROVAL{background:#3a2f10;color:#e3b341}
+.s-VERIFYING{background:#2b2440;color:#a371f7}
+.s-REMEDIATING{background:#12301f;color:#3fb950}
+.s-RESOLVED{background:#122b1b;color:#3fb950}
+.s-ESCALATED{background:#3d2416;color:#f0883e}
+.s-FAILED{background:#3d1a1a;color:#f85149}
+.sev-NEGLIGIBLE{background:#16301f;color:#3fb950}
+.sev-LOW{background:#16301f;color:#56c463}
+.sev-MODERATE{background:#3a2f10;color:#e3b341}
+.sev-HIGH{background:#3d2a16;color:#f0883e}
+.sev-CATASTROPHIC{background:#3d1a1a;color:#f85149}
+.d-ALLOW{background:#122b1b;color:#3fb950}
+.d-REQUIRE_APPROVAL{background:#3a2f10;color:#e3b341}
+.d-DENY{background:#3d1a1a;color:#f85149}
+.empty{color:var(--dim);font-size:12.5px;padding:20px;text-align:center;border:1px dashed var(--line);border-radius:8px}
+/* timeline */
+.tl{position:relative;padding-left:20px}
+.tl:before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.ev{position:relative;padding:9px 0 9px 4px;border-bottom:1px solid #1a2130}
+.ev:last-child{border-bottom:none}
+.ev:before{content:"";position:absolute;left:-19px;top:15px;width:9px;height:9px;border-radius:50%;background:var(--dim);border:2px solid var(--bg)}
+.ev.k-ACTION_EXECUTED:before{background:var(--ok)}
+.ev.k-ACTION_BLOCKED:before,.ev.k-GUARD_VERDICT:before{background:var(--crit)}
+.ev.k-APPROVAL_REQUESTED:before{background:var(--warn)}
+.ev.k-POLICY_DECISION:before{background:var(--accent)}
+.ev.k-RUN_RESUMED:before,.ev.k-CHECKPOINT_WRITTEN:before{background:#a371f7}
+.ev .h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ev .k{font-family:var(--mono);font-size:11px;font-weight:650;letter-spacing:.3px}
+.ev .ts{color:var(--dim);font-size:11px;font-family:var(--mono);margin-left:auto}
+.ev .who{color:var(--muted);font-size:11px;font-family:var(--mono)}
+.ev .body{margin-top:5px;font-size:12.5px;color:var(--muted)}
+.ev .body code{background:#0d1117;padding:1px 5px;border-radius:4px;font-size:11.5px;color:#a5d6ff}
+.reasons{margin:5px 0 0;padding-left:15px}
+.reasons li{margin:3px 0;font-size:12px;color:var(--muted)}
+.hash{font-family:var(--mono);font-size:10px;color:#3d4759;margin-top:4px}
+/* approvals */
+.appr{background:linear-gradient(180deg,#1d1809,#171208);border:1px solid #4a3a12;border-radius:8px;padding:13px;margin-bottom:10px}
+.appr .t{font-weight:650;color:#e3b341;margin-bottom:7px;font-size:13px}
+.appr .kv{font-size:12px;color:var(--muted);margin:3px 0;font-family:var(--mono)}
+.btns{display:flex;gap:8px;margin-top:11px}
+button{flex:1;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);color:var(--ink);font-weight:600;cursor:pointer;font-size:12.5px;font-family:inherit;transition:.15s}
+button:hover{border-color:#3d4a68}
+button.ok{background:#12301f;border-color:#1f5c33;color:#56c463}
+button.ok:hover{background:#173d24}
+button.no{background:#301616;border-color:#5c1f1f;color:#f85149}
+/* simulator */
+.sim{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:13px;margin-bottom:12px}
+select,input{width:100%;padding:7px 9px;border-radius:6px;border:1px solid var(--line);background:#0d1117;color:var(--ink);font-family:var(--mono);font-size:12px;margin-bottom:8px}
+label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--dim);margin-bottom:4px;font-weight:600}
+.simout{margin-top:11px;padding-top:11px;border-top:1px solid var(--line);display:none}
+.simout.on{display:block}
+.factors{margin:7px 0 0;padding-left:15px}
+.factors li{font-size:11.5px;color:var(--muted);margin:3px 0;font-family:var(--mono)}
+.bar{height:5px;border-radius:3px;background:#1a2130;overflow:hidden;margin:8px 0}
+.bar i{display:block;height:100%;border-radius:3px;transition:width .35s}
+.agent{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:7px;margin-bottom:7px;background:var(--panel);font-size:12.5px}
+.agent .n{font-weight:600}
+.agent .sp{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px}
+.chain{display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:7px;font-size:12px;margin-bottom:12px;font-family:var(--mono)}
+.chain.ok{background:#0f2417;border:1px solid #1f5c33;color:#56c463}
+.chain.bad{background:#2b1212;border:1px solid #5c1f1f;color:#f85149}
+.detail-hd{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.detail-hd h1{font-size:17px;margin:0 0 5px;font-weight:650;letter-spacing:-.3px}
+.detail-hd .meta{color:var(--dim);font-size:11.5px;font-family:var(--mono)}
+.findings{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:14px}
+.findings li{font-size:12.5px;color:var(--muted);margin:5px 0}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot" id="live"></span>Interlock <span class="sub">agent control plane</span></div>
+  <div class="spacer"></div>
+  <div class="stat"><b id="st-inc">0</b>incidents</div>
+  <div class="stat"><b id="st-appr">0</b>pending approvals</div>
+  <div class="stat"><b id="st-act">0</b>catalogued actions</div>
+  <div class="stat"><b id="st-model">—</b>reasoning model</div>
+</header>
+<main>
+  <div class="col">
+    <h2>Incidents <span class="count" id="c-inc"></span></h2>
+    <div id="incidents"></div>
+  </div>
+  <div class="col" id="detail">
+    <div class="empty">Select an incident to see its decision timeline.</div>
+  </div>
+  <div class="col">
+    <h2>Awaiting human decision <span class="count" id="c-appr"></span></h2>
+    <div id="approvals"></div>
+    <h2 style="margin-top:20px">Blast radius simulator</h2>
+    <div class="sim">
+      <label>Acting agent</label>
+      <select id="sim-agent"></select>
+      <label>Action</label>
+      <select id="sim-action"></select>
+      <label>Target</label>
+      <input id="sim-target" placeholder="checkout-api" value="checkout-api">
+      <label>Parameters (JSON)</label>
+      <input id="sim-params" placeholder='{"service":"checkout-api"}' value='{"service":"checkout-api","revision":"v41"}'>
+      <button onclick="runSim()">Score this action</button>
+      <div class="simout" id="sim-out"></div>
+    </div>
+    <h2 style="margin-top:20px">Registered agents</h2>
+    <div id="agents"></div>
+  </div>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+let sel=null, catalog=[];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const j=async(u,o)=>(await fetch(u,o)).json();
+const sevColor=s=>({NEGLIGIBLE:'#3fb950',LOW:'#56c463',MODERATE:'#e3b341',HIGH:'#f0883e',CATASTROPHIC:'#f85149'}[s]||'#8a97ad');
+const time=t=>t?new Date(t).toLocaleTimeString('en-GB'):'';
+
+async function boot(){
+  const [pol,cat,rdy]=await Promise.all([j('/v1/policy'),j('/v1/catalog'),j('/readyz')]);
+  catalog=cat.actions; $('#st-act').textContent=cat.count; $('#st-model').textContent=rdy.reasoning_model;
+  $('#sim-action').innerHTML=catalog.map(a=>`<option value="${a.action_type}">${a.action_type}</option>`).join('');
+  $('#sim-action').value='run.services.rollback';
+  const ag=await j('/v1/agents');
+  $('#sim-agent').innerHTML=ag.agents.map(a=>`<option value="${a.spiffe_id.split('/').pop()}">${esc(a.display_name)}</option>`).join('');
+  $('#sim-agent').value='remediation';
+  $('#agents').innerHTML=ag.agents.map(a=>`<div class="agent"><div><div class="n">${esc(a.display_name)}</div>
+    <div class="sp">${esc(a.spiffe_id.replace('spiffe://',''))}</div></div>
+    <div style="text-align:right"><span class="pill sev-${a.max_severity}">${a.max_severity}</span>
+    <div class="sp" style="margin-top:3px">${a.allowed_tools.length} actions · ${a.card_signature_valid?'signed':'UNSIGNED'}</div></div></div>`).join('');
+  tick(); setInterval(tick,3000);
+}
+
+async function tick(){
+  $('#live').style.background=''; 
+  const [inc,ap]=await Promise.all([j('/v1/incidents'),j('/v1/approvals')]);
+  $('#st-inc').textContent=inc.count; $('#c-inc').textContent=inc.count;
+  $('#st-appr').textContent=ap.count; $('#c-appr').textContent=ap.count;
+  $('#incidents').innerHTML=inc.incidents.length?inc.incidents.map(i=>`
+    <div class="card ${sel===i.incident_id?'sel':''}" onclick="open_('${i.incident_id}')">
+      <div class="t">${esc(i.title)}</div>
+      <div class="m"><span class="pill s-${i.state}">${i.state.replace(/_/g,' ')}</span>
+      <span>${esc(i.resource||'—')}</span><span>·</span><span>${i.actions_taken} actions</span>
+      <span>·</span><span>${i.findings} findings</span></div>
+    </div>`).join(''):'<div class="empty">No incidents yet.</div>';
+  $('#approvals').innerHTML=ap.approvals.length?ap.approvals.map(a=>{
+    const p=a.proposal,d=a.decision,b=d.blast_radius||{};
+    return `<div class="appr"><div class="t">${esc(p.action_type)}</div>
+      <div class="kv">target: ${esc(p.target)}</div>
+      <div class="kv">severity: <span class="pill sev-${b.severity}">${b.severity}</span></div>
+      ${b.cost_ceiling_usd>0?`<div class="kv">cost ceiling: $${b.cost_ceiling_usd.toFixed(2)}</div>`:''}
+      <ul class="reasons">${(d.reasons||[]).map(r=>`<li>${esc(r)}</li>`).join('')}</ul>
+      <div class="btns"><button class="ok" onclick="decide('${a.approval_id}',true)">Approve</button>
+      <button class="no" onclick="decide('${a.approval_id}',false)">Deny</button></div></div>`;}).join('')
+    :'<div class="empty">Nothing is waiting on a human.</div>';
+  if(sel) render(sel);
+}
+
+async function decide(id,ok){
+  await fetch(`/v1/approvals/${id}/decide`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({approved:ok,resolved_by:'console-operator',
+      justification:ok?'Approved from the Interlock console.':'Denied from the Interlock console.'})});
+  tick();
+}
+function open_(id){sel=id;render(id);tick();}
+
+async function render(id){
+  const [d,l]=await Promise.all([j(`/v1/incidents/${id}`),j(`/v1/incidents/${id}/ledger`)]);
+  const i=d.incident,v=l.verification;
+  $('#detail').innerHTML=`
+    <div class="detail-hd"><div style="flex:1">
+      <h1>${esc(i.alert.title)}</h1>
+      <div class="meta">${esc(i.incident_id)} · ${esc(i.alert.resource_name||'—')} · rev ${i.revision} · opened ${time(i.opened_at)}</div>
+    </div><span class="pill s-${i.state}">${i.state.replace(/_/g,' ')}</span></div>
+    <div class="chain ${v.valid?'ok':'bad'}">${v.valid?'✓':'✗'} audit chain ${v.valid?'verified':'BROKEN'} — ${v.entries_checked} signed entries
+      ${v.problems.length?'· '+esc(v.problems[0]):''}</div>
+    ${i.findings.length?`<div class="findings"><h2>Findings</h2><ul>${i.findings.map(f=>`<li>${esc(f)}</li>`).join('')}</ul></div>`:''}
+    ${i.resolution?`<div class="findings"><h2>Resolution</h2><div style="font-size:12.5px;color:var(--muted)">${esc(i.resolution)}</div></div>`:''}
+    ${i.escalation_reason?`<div class="findings"><h2>Escalation</h2><div style="font-size:12.5px;color:#f0883e">${esc(i.escalation_reason)}</div></div>`:''}
+    <h2>Decision timeline <span class="count">${l.entries.length} entries</span></h2>
+    <div class="tl">${l.entries.slice().reverse().map(ev=>{
+      const p=ev.payload||{};
+      let body='';
+      if(ev.event_type==='ACTION_PROPOSED') body=`<code>${esc(p.action_type)}</code> on <code>${esc(p.target)}</code>${p.rationale?`<div style="margin-top:4px">${esc(p.rationale)}</div>`:''}`;
+      else if(ev.event_type==='ACTION_SCORED') body=`<span class="pill sev-${p.severity}">${p.severity}</span> score ${p.score} · ${esc(p.reversibility)}${p.cost_ceiling_usd>0?` · ceiling $${p.cost_ceiling_usd.toFixed(2)}`:''}
+        <ul class="factors">${(p.factors||[]).map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`;
+      else if(ev.event_type==='POLICY_DECISION') body=`<span class="pill d-${p.decision}">${p.decision.replace(/_/g,' ')}</span>
+        <ul class="reasons">${(p.reasons||[]).map(r=>`<li>${esc(r)}</li>`).join('')}</ul>`;
+      else if(ev.event_type==='GUARD_VERDICT') body=`<span class="pill d-DENY">${esc((p.categories||[]).join(', '))}</span><div style="margin-top:4px">${esc(p.detail||'')}</div>`;
+      else if(ev.event_type==='STATE_TRANSITION') body=`<code>${esc(p.from)}</code> → <code>${esc(p.to)}</code> ${esc(p.note||'')}`;
+      else if(ev.event_type==='AUDIT_VERDICT') body=`<span class="pill ${p.confirmed?'d-ALLOW':'d-DENY'}">${p.confirmed?'CONFIRMED':'NOT CONFIRMED'}</span> confidence ${p.confidence}
+        ${(p.discrepancies||[]).length?`<ul class="reasons">${p.discrepancies.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+        <div style="margin-top:4px">${esc(p.narrative||'')}</div>`;
+      else if(ev.event_type==='APPROVAL_RESOLVED') body=`<span class="pill ${p.approved?'d-ALLOW':'d-DENY'}">${p.approved?'APPROVED':'DENIED'}</span> by ${esc(ev.actor)} — ${esc(p.justification||'')}`;
+      else if(ev.event_type==='RUN_RESUMED') body=`resumed in <code>${esc(p.resumed_in_state)}</code> from checkpoint <code>${esc(p.from_checkpoint||'—')}</code>`;
+      else body=Object.entries(p).slice(0,4).map(([k,x])=>`<code>${esc(k)}=${esc(typeof x==='object'?JSON.stringify(x).slice(0,70):x)}</code>`).join(' ');
+      return `<div class="ev k-${ev.event_type}"><div class="h"><span class="k">${ev.event_type.replace(/_/g,' ')}</span>
+        <span class="who">${esc((ev.actor||'').replace('spiffe://interlock.internal/ns/sre/agent/','agent:').replace('interlock/','core:'))}</span>
+        <span class="ts">${time(ev.created_at)}</span></div>
+        <div class="body">${body}</div>
+        <div class="hash">#${ev.sequence} ${esc((ev.entry_hash||'').slice(0,16))}… ← ${esc((ev.prev_hash||'').slice(0,12))}…</div></div>`;
+    }).join('')}</div>`;
+}
+
+async function runSim(){
+  let params={};
+  try{params=JSON.parse($('#sim-params').value||'{}')}catch(e){alert('Parameters must be valid JSON');return}
+  const r=await j('/v1/simulate',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({agent:$('#sim-agent').value,action_type:$('#sim-action').value,target:$('#sim-target').value,parameters:params})});
+  const b=r.blast_radius,d=r.decision;
+  $('#sim-out').className='simout on';
+  $('#sim-out').innerHTML=`<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+      <span class="pill sev-${b.severity}">${b.severity}</span><span class="pill d-${d.decision}">${d.decision.replace(/_/g,' ')}</span>
+      <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim)">${b.score}/100</span></div>
+    <div class="bar"><i style="width:${b.score}%;background:${sevColor(b.severity)}"></i></div>
+    <div style="font-size:11px;color:var(--dim);font-family:var(--mono)">
+      reversibility ${b.reversibility} · scope ${b.scope}/4 · data ${b.data_risk}/4 · avail ${b.availability_risk}/4 · priv ${b.privilege_risk}/4${b.cost_ceiling_usd>0?` · $${b.cost_ceiling_usd.toFixed(2)}`:''}</div>
+    <ul class="reasons">${d.reasons.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+    <ul class="factors">${b.factors.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+}
+boot();
+</script>
+</body>
+</html>

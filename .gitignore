@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.interlock-keys/
+.interlock-test-keys/
+.interlock-smoke-keys/
+.env
+*.egg-info/
+dist/
+build/

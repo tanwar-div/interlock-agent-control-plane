@@ -1,0 +1,44 @@
+[project]
+name = "interlock"
+version = "1.0.0"
+description = "Interlock - an oversight and containment control plane for autonomous agents operating on Google Cloud."
+requires-python = ">=3.11"
+dependencies = [
+  "google-adk>=1.0.0",
+  "google-genai>=1.0.0",
+  "google-cloud-firestore>=2.19.0",
+  "google-cloud-pubsub>=2.23.0",
+  "google-cloud-logging>=3.11.0",
+  "google-cloud-monitoring>=2.22.0",
+  "google-cloud-run>=0.10.0",
+  "google-cloud-secret-manager>=2.20.0",
+  "google-cloud-storage>=2.18.0",
+  "google-cloud-compute>=1.19.0",
+  "google-api-python-client>=2.140.0",
+  "google-auth>=2.35.0",
+  "opentelemetry-sdk>=1.27.0",
+  "opentelemetry-exporter-gcp-trace>=1.7.0",
+  "opentelemetry-instrumentation-fastapi>=0.48b0",
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.9.0",
+  "pydantic-settings>=2.5.0",
+  "cryptography>=43.0.0",
+  "httpx>=0.27.0",
+  "tenacity>=9.0.0",
+  "python-dateutil>=2.9.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0", "ruff>=0.6.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["interlock"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

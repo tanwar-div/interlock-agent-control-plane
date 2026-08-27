@@ -1,0 +1,13 @@
+.venv/
+.git/
+.interlock-keys/
+.interlock-test-keys/
+.interlock-smoke-keys/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+docs/
+deploy/
+*.md
+!README.md

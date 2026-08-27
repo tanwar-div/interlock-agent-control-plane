@@ -1,0 +1,214 @@
+# Interlock
+
+**An oversight and containment control plane for autonomous agents operating on real infrastructure.**
+
+Interlock lets an agent fleet hold production credentials and act without a human watching, by making every action it takes identity-bound, blast-radius scored, policy-gated, independently audited, and provable after the fact.
+
+---
+
+## The problem
+
+Autonomous agents are capable enough to fix production and are not trusted to. The reason is not capability, it is consequence:
+
+- An agent given AWS credentials and a deadline provisioned five oversized instances and left its operator with a **$6,500** bill.
+- A stolen Gemini API key ran up **$82,314** in 48 hours; Google Cloud has no hard spending cap.
+- Agents have deleted production databases, and shipped code that silently dropped an auth check while passing every test.
+
+Gartner expects **40% of enterprises to decommission autonomous agents by 2027 over governance gaps discovered only after a production incident**. NIST notes agents are typically deployed as generic service accounts with no identity, authorization, or accountability of their own. From August 2026 the EU AI Act requires high-risk systems be designed so humans can effectively oversee them.
+
+So teams do the rational thing: they keep agents in read-only mode, or they keep a human watching, and the automation never pays for itself.
+
+**Interlock removes the human from the loop by putting the guarantees somewhere the agent cannot reach.**
+
+---
+
+## What it does
+
+Interlock runs two planes.
+
+**The worker plane** is an autonomous SRE fleet that does real work: it receives an alert, investigates across Cloud Logging and Cloud Monitoring, diagnoses the fault, and applies a fix to live Cloud Run infrastructure.
+
+**The governance plane** stands between that fleet and the world. Every tool call is intercepted before it executes and must pass:
+
+| Stage | Question | Mechanism |
+|---|---|---|
+| Identity | Which agent is asking, and can it prove it? | Ed25519-signed proposals against registry-signed agent cards, SPIFFE-style IDs |
+| Capability | Is this agent entitled to this action at all? | Per-agent tool allowlist and severity ceiling |
+| Blast radius | What could this destroy? | **Deterministic scorer — no model involved** |
+| Content | Is the surrounding text trying to steer the agent? | Model Armor + a Gemma classifier + local heuristics |
+| Policy | Given all of the above, allow, ask, or refuse? | Ordered, named, auditable rules |
+| Audit | Did the claimed action actually happen? | Independent auditor agent with no shared context |
+| Evidence | Can any of this be checked later? | Hash-chained, signed, append-only ledger |
+
+### The design decisions that matter
+
+**Enforcement is a plugin, not a convention.** Interlock is an ADK `BasePlugin` installed on the `Runner`. In ADK, returning a value from `before_tool_callback` *replaces* the tool call — the function never runs. Governance therefore applies to every agent in the fleet, including agents added later and sub-agents delegated to. An agent cannot opt out, and cannot argue past it, because it is not consulted.
+
+**Blast-radius scoring never calls a model.** A hand-written catalogue of 32 infrastructure actions supplies a risk floor; concrete parameters may raise that floor but never lower it. Deleting a Cloud SQL instance is irreversible whether or not an agent has constructed a persuasive reason. **Any action type not in the catalogue scores CATASTROPHIC** — capability is added deliberately, never emergently.
+
+**The guard model is deliberately not the reasoning model.** Content inspection runs on Gemma, separately from Gemini 3.6 Flash. If the reasoning context has been manipulated, its guard must not be manipulable along with it.
+
+**The auditor does not review the argument, it observes the world.** It runs in its own session with no access to the remediation agent's reasoning, holds only read-only tools, and is asked what is true of the live system. An agent that checks its own work reproduces its own mistakes. A claim of success is never sufficient to close an incident — an unparseable or unconfirmed verdict escalates.
+
+**Durability is phase-level.** An incident is a state machine, and each phase is bracketed by a Firestore checkpoint. If the process handling an incident dies, another picks it up from the last completed phase — it does not restart, and it does not re-apply a change that already landed.
+
+---
+
+## Architecture
+
+![Architecture](docs/architecture.svg)
+
+```
+Cloud Monitoring alert
+        │
+        ▼
+   Pub/Sub  interlock-alerts ──push──▶ Gateway (Cloud Run)
+                                          │  opens incident, writes ledger entry
+                                          ▼
+   Pub/Sub  interlock-actions ─push──▶ advance one phase ──┐
+        ▲                                                  │
+        └──────────── enqueues next phase ◀────────────────┘
+
+   Each phase runs one ADK agent through a Runner carrying the Interlock plugin:
+
+     triage ─▶ investigation ─▶ remediation ─▶ independent audit
+        │            │               │                │
+        └────────────┴───────┬───────┴────────────────┘
+                             ▼
+                    Interlock plugin
+          identity → blast radius → guard → policy
+                             │
+              ┌──────────────┼───────────────┐
+            ALLOW      REQUIRE_APPROVAL     DENY
+              │              │               │
+          tool runs    parked for human   never runs
+                             │
+                             ▼
+              Firestore: incidents, checkpoints,
+              approvals, agent registry, hash-chained ledger
+                             │
+                             ▼
+              Cloud Trace: full reasoning-chain spans
+```
+
+Because each phase is a separate Pub/Sub message, no request holds a connection while an agent thinks. An incident can span hours on scale-to-zero infrastructure, survive an instance being recycled mid-flight, and retry a failed phase without replaying the phases that already succeeded.
+
+---
+
+## Stack
+
+| Requirement | Used |
+|---|---|
+| Gemini 3.5+ | **Gemini 3.6 Flash** for reasoning and audit, via Vertex AI / Gemini API |
+| Google agent framework | **Agent Development Kit** — `LlmAgent`, `Runner`, `BasePlugin`, `ToolContext` |
+| Google Cloud services | **Cloud Run**, **Firestore**, **Pub/Sub**, Cloud Logging, Cloud Monitoring, Cloud Trace, Secret Manager, **Model Armor** |
+| Additional Google model | **Gemma** as the independent guard classifier |
+
+---
+
+## Spin-up
+
+### Prerequisites
+
+- A Google Cloud project with billing enabled
+- `gcloud` CLI, authenticated
+- Python 3.11+
+
+### Deploy to Google Cloud
+
+```bash
+git clone <this-repo> && cd interlock
+gcloud auth login
+gcloud auth application-default login
+
+export PROJECT_ID=your-project-id
+export REGION=us-central1
+
+./deploy/scripts/00-setup.sh     # APIs, Firestore, Pub/Sub, service account, Model Armor, signing key
+./deploy/scripts/01-deploy.sh    # build, deploy to Cloud Run, wire push subscriptions
+```
+
+`00-setup.sh` is idempotent and safe to re-run. It grants the control plane a **deliberately narrow** role set — no `owner`, no `editor`, and no capability to delete databases. Dangerous capability is absent rather than merely policed.
+
+The deploy prints your console URL. Open it.
+
+### Run locally
+
+```bash
+pip install uv && uv venv .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+
+export INTERLOCK_PROJECT_ID=your-project-id   # omit to run fully offline on an in-memory store
+export GOOGLE_CLOUD_PROJECT=$INTERLOCK_PROJECT_ID
+.venv/bin/uvicorn interlock.gateway.app:app --reload --port 8080
+```
+
+Open <http://localhost:8080>.
+
+### Tests
+
+```bash
+.venv/bin/python -m pytest tests/ -q
+```
+
+35 tests, no cloud project or model access required. They cover the scorer's determinism and fail-closed behaviour, every policy rule, ledger tamper detection, identity and capability enforcement, tool interception, prompt-injection quarantine, and **resumption of an interrupted incident in a separate process**.
+
+### Trigger an incident
+
+```bash
+curl -X POST "$URL/v1/alerts" -H 'Content-Type: application/json' -d '{
+  "title": "Cloud Run 5xx rate above threshold",
+  "description": "checkout-api returning 503 after revision v42",
+  "resource_name": "checkout-api",
+  "severity": "ERROR"
+}'
+```
+
+Or connect it to real Cloud Monitoring by pointing an alerting policy's notification channel at the `interlock-alerts` topic.
+
+---
+
+## API
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/v1/alerts` | Open an incident and dispatch the first phase |
+| `GET` | `/v1/incidents` | List incidents |
+| `GET` | `/v1/incidents/{id}` | Incident with full decision timeline |
+| `GET` | `/v1/incidents/{id}/ledger` | Ledger entries plus chain verification |
+| `GET` | `/v1/incidents/{id}/evidence` | Portable, independently verifiable evidence bundle |
+| `POST` | `/v1/incidents/{id}/resume` | Resume an interrupted incident from checkpoint |
+| `GET` | `/v1/approvals` | Actions waiting on a human |
+| `POST` | `/v1/approvals/{id}/decide` | Approve or deny |
+| `POST` | `/v1/simulate` | **Score a hypothetical action without executing anything** |
+| `GET` | `/v1/agents` | Agent registry with identity cards |
+| `GET` | `/v1/catalog` | The action catalogue and its risk profiles |
+| `GET` | `/v1/policy` | Active policy rules and budgets |
+
+`/v1/simulate` is the governance plane's read-only face: it answers "what would happen if an agent asked for this?" using the exact scorer and policy engine that run in production.
+
+---
+
+## What the policy actually does
+
+Real output from the deployed scorer and policy engine:
+
+| Action | Severity | Decision | Leading reason |
+|---|---|---|---|
+| `run.services.rollback` to a healthy revision | NEGLIGIBLE | **ALLOW** | reversible, single service, no data or access risk |
+| `logging.entries.list` | NEGLIGIBLE | **ALLOW** | read-only |
+| `storage.buckets.setIamPolicy` granting `allUsers` | CATASTROPHIC | **DENY** | grants access to a public principal |
+| `sql.instances.delete` on `prod-orders-db` | CATASTROPHIC | **DENY** | irreversible action with high data-loss risk is never autonomous |
+| `compute.instances.insert` ×5 `n2-standard-64` | CATASTROPHIC | **DENY** | projected $373.56 exceeds the $25.00 incident budget |
+| any uncatalogued action | CATASTROPHIC | **DENY** | unknown actions fail closed |
+| the same rollback, requested by the *investigation* agent | NEGLIGIBLE | **DENY** | that agent's card does not carry the capability |
+
+The last row is the point: severity and entitlement are independent. A safe action is still refused to an agent that has no business performing it.
+
+---
+
+## Limits, honestly
+
+- The action catalogue covers 32 operations across Cloud Run, Cloud SQL, Cloud Storage, IAM and Compute. It is not exhaustive — but an action outside it is denied, so the failure mode of an incomplete catalogue is refusal, not exposure.
+- Cost projection deliberately over-estimates. It bounds the worst case; it is not a billing forecast.
+- The guard reduces prompt-injection risk; it does not eliminate it. That is why the deterministic scorer, the capability allowlist and the severity ceiling sit behind it — a successful injection still cannot reach an action the agent was never entitled to perform.
+- Model Armor is called per inspection. Google provides 2M tokens per project per month at no cost, which comfortably covers this workload, but it is a real dependency and the system fails closed when it is unreachable.
