@@ -45,6 +45,7 @@ from interlock.common.store import DocumentStore, get_store
 from interlock.identity.registry import AgentRegistry, IdentityError, sign_proposal
 from interlock.ledger.ledger import Ledger
 from interlock.policy.engine import PolicyEngine
+from interlock.runtime import freshness
 from interlock.runtime.governed import lookup_tool
 
 logger = logging.getLogger(__name__)
@@ -255,6 +256,31 @@ class InterlockPlugin(BasePlugin):
         )
 
         if decision.decision is Decision.ALLOW:
+            # Policy permitted the action, but the evidence behind it may be
+            # minutes old. Confirm the target is still what the agent thinks it
+            # is before the change actually lands.
+            if freshness.is_checked(proposal.action_type):
+                verdict = await freshness.revalidate(proposal)
+                if verdict.stale:
+                    await self._ledger.append(
+                        incident_id=incident_id,
+                        event_type=LedgerEventType.ACTION_BLOCKED,
+                        actor="interlock/freshness",
+                        payload={
+                            "proposal_id": proposal.proposal_id,
+                            "stage": "revalidation",
+                            "detail": verdict.detail,
+                            "observed": verdict.observed or {},
+                        },
+                    )
+                    logger.info("freshness check blocked %s: %s", proposal.action_type, verdict.detail)
+                    return self._blocked(
+                        "The state this action was planned against has changed since you "
+                        f"gathered your evidence. {verdict.detail} "
+                        "Re-investigate before acting.",
+                        stale=True,
+                    )
+
             # Stash for after_tool_callback.
             try:
                 state["last_proposal_id"] = proposal.proposal_id

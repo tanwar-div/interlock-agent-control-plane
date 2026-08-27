@@ -40,6 +40,18 @@ Interlock runs two planes.
 | Audit | Did the claimed action actually happen? | Independent auditor agent with no shared context |
 | Evidence | Can any of this be checked later? | Hash-chained, signed, append-only ledger |
 
+### The five problems a long-running agent actually has
+
+A long-running agent is not a chatbot that runs for longer. It is dormant most of the time, woken by events, and it accumulates state for weeks. That creates five distinct failure modes, and Interlock addresses each one structurally:
+
+| Problem | Symptom | How Interlock handles it |
+|---|---|---|
+| **Autonomy** | the agent only acts when a human asks | Cloud Scheduler heartbeat → `/v1/sweep` every 5 minutes, resuming stalled incidents and expiring unanswered approvals |
+| **Unstructured drift** | the agent wanders off its own workflow | an explicit state machine performs transitions; the model cannot invent one |
+| **Context degradation** | quality falls as the transcript grows | ADK event compaction (interval 4, overlap 1) plus per-phase agents that never see each other's context |
+| **Snapshot staleness** | the agent acts on evidence gathered minutes ago | live revalidation of the target immediately before a mutation lands |
+| **Unauthorized action** | the agent does something nobody sanctioned | identity, capability ceiling, blast radius and policy — enforced in the tool path |
+
 ### The design decisions that matter
 
 **Enforcement is a plugin, not a convention.** Interlock is an ADK `BasePlugin` installed on the `Runner`. In ADK, returning a value from `before_tool_callback` *replaces* the tool call — the function never runs. Governance therefore applies to every agent in the fleet, including agents added later and sub-agents delegated to. An agent cannot opt out, and cannot argue past it, because it is not consulted.
@@ -49,6 +61,8 @@ Interlock runs two planes.
 **The guard model is deliberately not the reasoning model.** Content inspection runs on Gemma, separately from Gemini 3.6 Flash. If the reasoning context has been manipulated, its guard must not be manipulable along with it.
 
 **The auditor does not review the argument, it observes the world.** It runs in its own session with no access to the remediation agent's reasoning, holds only read-only tools, and is asked what is true of the live system. An agent that checks its own work reproduces its own mistakes. A claim of success is never sufficient to close an incident — an unparseable or unconfirmed verdict escalates.
+
+**The fleet learns from refusal.** When a human denies an action, that decision is written to service-scoped memory and injected into the brief of every future incident on that service as *binding precedent*. The agent stops re-proposing things people have already rejected, and must state what changed if it wants to revisit one. Memories reinforce when repeated, are ranked human-decision-first, and expire after 90 days — what mattered about a service that has since been rewritten is noise, not context.
 
 **Durability is phase-level.** An incident is a state machine, and each phase is bracketed by a Firestore checkpoint. If the process handling an incident dies, another picks it up from the last completed phase — it does not restart, and it does not re-apply a change that already landed.
 
@@ -103,6 +117,7 @@ Because each phase is a separate Pub/Sub message, no request holds a connection 
 | Google agent framework | **Agent Development Kit** — `LlmAgent`, `Runner`, `BasePlugin`, `ToolContext` |
 | Google Cloud services | **Cloud Run**, **Firestore**, **Pub/Sub**, Cloud Logging, Cloud Monitoring, Cloud Trace, Secret Manager, **Model Armor** |
 | Additional Google model | **Gemma** as the independent guard classifier |
+| Autonomy | **Cloud Scheduler** heartbeat driving the sweeper |
 
 ---
 
@@ -150,7 +165,7 @@ Open <http://localhost:8080>.
 .venv/bin/python -m pytest tests/ -q
 ```
 
-35 tests, no cloud project or model access required. They cover the scorer's determinism and fail-closed behaviour, every policy rule, ledger tamper detection, identity and capability enforcement, tool interception, prompt-injection quarantine, and **resumption of an interrupted incident in a separate process**.
+53 tests, no cloud project or model access required. They cover the scorer's determinism and fail-closed behaviour, every policy rule, ledger tamper detection, identity and capability enforcement, tool interception, prompt-injection quarantine, memory precedence and decay, sweeper behaviour, point-of-action revalidation, and **resumption of an interrupted incident in a separate process**.
 
 ### Trigger an incident
 
@@ -182,6 +197,9 @@ Or connect it to real Cloud Monitoring by pointing an alerting policy's notifica
 | `POST` | `/v1/simulate` | **Score a hypothetical action without executing anything** |
 | `GET` | `/v1/agents` | Agent registry with identity cards |
 | `GET` | `/v1/catalog` | The action catalogue and its risk profiles |
+| `POST` | `/v1/sweep` | Heartbeat: resume stalled incidents, expire stale approvals |
+| `GET` | `/v1/memory` | What the fleet has learned, and from which incidents |
+| `GET` | `/v1/memory/brief` | The exact recall block injected into an agent's brief |
 | `GET` | `/v1/policy` | Active policy rules and budgets |
 
 `/v1/simulate` is the governance plane's read-only face: it answers "what would happen if an agent asked for this?" using the exact scorer and policy engine that run in production.
@@ -206,9 +224,17 @@ The last row is the point: severity and entitlement are independent. A safe acti
 
 ---
 
+## Cost
+
+Built for scale-to-zero. Everything except model tokens sits inside permanent free tiers — Cloud Run (`min-instances 0`), Firestore, Pub/Sub, Cloud Build, Cloud Trace, Secret Manager, and Model Armor's 2M tokens per project per month.
+
+The only meaningful cost is Gemini 3.6 Flash, at roughly **$0.10–0.20 per full incident** across four agent phases. Two structural protections bound it: a **$25 per-incident budget** with a hard **25-action ceiling**, and the fact that the one genuinely expensive capability — provisioning compute — is refused by policy rather than merely discouraged.
+
 ## Limits, honestly
 
 - The action catalogue covers 32 operations across Cloud Run, Cloud SQL, Cloud Storage, IAM and Compute. It is not exhaustive — but an action outside it is denied, so the failure mode of an incomplete catalogue is refusal, not exposure.
 - Cost projection deliberately over-estimates. It bounds the worst case; it is not a billing forecast.
 - The guard reduces prompt-injection risk; it does not eliminate it. That is why the deterministic scorer, the capability allowlist and the severity ceiling sit behind it — a successful injection still cannot reach an action the agent was never entitled to perform.
+- Human-in-the-loop is implemented as an out-of-band approval record rather than ADK's in-session `request_confirmation`. That is deliberate: an approval that lives in Firestore survives the death of the process that requested it, which an in-session confirmation does not. The cost is that it is less idiomatic ADK.
+- Memory is service-scoped and lexical. It is not a semantic index, and it will not generalise a lesson learned about one service to a similar one.
 - Model Armor is called per inspection. Google provides 2M tokens per project per month at no cost, which comfortably covers this workload, but it is a real dependency and the system fails closed when it is unreachable.

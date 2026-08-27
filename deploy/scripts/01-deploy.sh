@@ -55,7 +55,30 @@ create_sub() {
 create_sub interlock-alerts-push  interlock-alerts  /v1/pubsub/alerts
 create_sub interlock-actions-push interlock-actions /v1/pubsub/advance
 
+say "Creating the Cloud Scheduler heartbeat"
+# This is what makes the fleet autonomous rather than reactive: every five
+# minutes the control plane wakes, resumes incidents whose handling process
+# died, and expires approvals nobody answered.
+gcloud services enable cloudscheduler.googleapis.com --quiet
+if gcloud scheduler jobs describe interlock-heartbeat --location="${REGION}" >/dev/null 2>&1; then
+  gcloud scheduler jobs update http interlock-heartbeat \
+    --location="${REGION}" --schedule="*/5 * * * *" \
+    --uri="${URL}/v1/sweep" --http-method=POST --quiet
+  echo "    updated interlock-heartbeat"
+else
+  gcloud scheduler jobs create http interlock-heartbeat \
+    --location="${REGION}" \
+    --schedule="*/5 * * * *" \
+    --uri="${URL}/v1/sweep" \
+    --http-method=POST \
+    --attempt-deadline=600s \
+    --description="Wakes dormant Interlock incidents and expires stale approvals" \
+    --quiet
+  echo "    created interlock-heartbeat (every 5 minutes)"
+fi
+
 say "Done"
 echo "  console:  ${URL}"
 echo "  health:   ${URL}/readyz"
 echo "  api docs: ${URL}/docs"
+echo "  heartbeat: every 5 min via Cloud Scheduler -> ${URL}/v1/sweep"

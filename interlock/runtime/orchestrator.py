@@ -14,10 +14,13 @@ module and not by anything the model emits.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 import logging
 from typing import Any
 
+from google.adk.apps.app import App
+from google.adk.apps._configs import EventsCompactionConfig, ResumabilityConfig
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 from google.genai import types
@@ -37,6 +40,12 @@ from interlock.common.models import (
 from interlock.common.store import DocumentStore, get_store
 from interlock.identity.registry import AgentRegistry
 from interlock.ledger.ledger import Ledger
+from interlock.memory.service import (
+    KIND_FAULT,
+    KIND_REMEDIATION,
+    IncidentMemory,
+    InterlockMemoryService,
+)
 from interlock.policy.engine import PolicyEngine
 from interlock.runtime.governed import action_types_for
 from interlock.runtime.plugin import InterlockPlugin
@@ -45,6 +54,17 @@ from interlock.workers.agents import FLEET_SPEC
 logger = logging.getLogger(__name__)
 
 APP_NAME = "interlock"
+
+
+def _parse(value: Any) -> dt.datetime:
+    """Parse a stored ISO timestamp, treating anything unreadable as very old."""
+    if isinstance(value, dt.datetime):
+        return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+    try:
+        parsed = dt.datetime.fromisoformat(str(value))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+    except (TypeError, ValueError):
+        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
 
 # Which agent runs in which state, and where the machine goes next.
 _PHASE_AGENT = {
@@ -81,9 +101,12 @@ class IncidentOrchestrator:
         self._policy = PolicyEngine()
         self._guard = get_guard()
         self._sessions = session_service or self._build_session_service()
+        self._memory = IncidentMemory(self._store)
+        self._memory_service = InterlockMemoryService(self._memory)
         self._agent_keys: dict[str, str] = {}
         self._cards: dict[str, Any] = {}
         self._agents: dict[str, Any] = {}
+        self._apps: dict[str, App] = {}
         self._plugin: InterlockPlugin | None = None
         self._ready = False
 
@@ -129,8 +152,35 @@ class IncidentOrchestrator:
             guard=self._guard,
             store=self._store,
         )
+        # Each agent is wrapped in an ADK App so that compaction and
+        # resumability are properties of the deployment rather than something
+        # each phase has to remember to do.
+        compaction = (
+            EventsCompactionConfig(
+                compaction_interval=self._settings.compaction_interval,
+                overlap_size=self._settings.compaction_overlap,
+            )
+            if self._settings.compaction_enabled
+            else None
+        )
+        for spec in FLEET_SPEC:
+            key = spec["name"]
+            self._apps[key] = App(
+                name=f"{APP_NAME}-{key}",
+                root_agent=self._agents[key],
+                plugins=[self._plugin],
+                events_compaction_config=compaction,
+                resumability_config=ResumabilityConfig(is_resumable=self._settings.adk_resumable),
+            )
+
         self._ready = True
-        logger.info("fleet ready: %s", ", ".join(self._cards))
+        logger.info(
+            "fleet ready: %s (compaction=%s, resumable=%s)",
+            ", ".join(self._cards),
+            "every %d events" % self._settings.compaction_interval
+            if self._settings.compaction_enabled else "off",
+            self._settings.adk_resumable,
+        )
 
     # -- persistence -------------------------------------------------------
 
@@ -224,7 +274,6 @@ class IncidentOrchestrator:
     ) -> str:
         """Run one agent to completion and return its final text output."""
         assert self._plugin is not None
-        agent = self._agents[agent_key]
         card = self._cards[agent_key]
 
         session_id = f"{incident.session_id}_{session_suffix}"
@@ -233,18 +282,18 @@ class IncidentOrchestrator:
             "actor_spiffe": card.spiffe_id,
             "incident_state": incident.state.value,
         }
+        app_name = self._apps[agent_key].name
         await self._sessions.create_session(
-            app_name=APP_NAME,
+            app_name=app_name,
             user_id=incident.incident_id,
             session_id=session_id,
             state=initial_state,
         )
 
         runner = Runner(
-            app_name=APP_NAME,
-            agent=agent,
+            app=self._apps[agent_key],
             session_service=self._sessions,
-            plugins=[self._plugin],
+            memory_service=self._memory_service,
         )
 
         message = types.Content(role="user", parts=[types.Part(text=brief)])
@@ -271,7 +320,7 @@ class IncidentOrchestrator:
 
         # Read back terminal intent the tools may have written into state.
         session = await self._sessions.get_session(
-            app_name=APP_NAME, user_id=incident.incident_id, session_id=session_id
+            app_name=app_name, user_id=incident.incident_id, session_id=session_id
         )
         if session is not None:
             state = dict(session.state or {})
@@ -294,8 +343,9 @@ class IncidentOrchestrator:
 
     # -- briefs ------------------------------------------------------------
 
-    def _brief(self, incident: Incident, phase: IncidentState) -> str:
+    async def _brief(self, incident: Incident, phase: IncidentState) -> str:
         alert = incident.alert
+        recall = await self._memory.recall_brief(service=alert.resource_name)
         header = (
             f"INCIDENT {incident.incident_id}\n"
             f"Alert: {alert.title}\n"
@@ -305,17 +355,21 @@ class IncidentOrchestrator:
         )
         findings = "\n".join(f"- {f}" for f in incident.findings) or "- (none yet)"
 
+        memory_block = f"\n{recall}\n" if recall else ""
+
         if phase is IncidentState.TRIAGING:
-            return header + "\nTriage this alert."
+            return header + memory_block + "\nTriage this alert."
         if phase is IncidentState.INVESTIGATING:
             return (
                 header
+                + memory_block
                 + f"\nTriage findings so far:\n{findings}\n\n"
                 "Investigate and establish what is actually happening."
             )
         if phase is IncidentState.PLANNING:
             return (
                 header
+                + memory_block
                 + f"\nInvestigation findings:\n{findings}\n\n"
                 "Decide on and carry out the smallest safe remediation, or escalate."
             )
@@ -355,7 +409,7 @@ class IncidentOrchestrator:
         output = await self._run_agent(
             agent_key=agent_key,
             incident=incident,
-            brief=self._brief(incident, phase),
+            brief=await self._brief(incident, phase),
             session_suffix=phase.value.lower(),
         )
 
@@ -452,7 +506,35 @@ class IncidentOrchestrator:
             auditor=auditor,
         )
 
+    async def _learn(self, incident: Incident) -> None:
+        """Turn a finished incident into recall for the next one."""
+        service = incident.alert.resource_name
+        if not service:
+            return
+
+        # What the fault looked like. Findings are the agent's own evidence,
+        # so they are the most reusable signal we have.
+        for finding in incident.findings[:3]:
+            await self._memory.remember(
+                service=service, kind=KIND_FAULT, summary=finding[:400],
+                incident_id=incident.incident_id,
+            )
+
+        if incident.state is IncidentState.RESOLVED and incident.resolution:
+            await self._memory.remember(
+                service=service, kind=KIND_REMEDIATION,
+                summary=f"Resolved: {incident.resolution[:350]}",
+                incident_id=incident.incident_id, weight=2.0,
+            )
+        elif incident.state is IncidentState.ESCALATED and incident.escalation_reason:
+            await self._memory.remember(
+                service=service, kind=KIND_REMEDIATION,
+                summary=f"Autonomous remediation did not succeed: {incident.escalation_reason[:350]}",
+                incident_id=incident.incident_id, weight=1.5,
+            )
+
     async def _close(self, incident: Incident) -> None:
+        await self._learn(incident)
         report = await self._ledger.verify_chain(incident.incident_id)
         head = await self._ledger.head(incident.incident_id)
         await self._store.patch(
@@ -503,6 +585,89 @@ class IncidentOrchestrator:
         logger.info("resuming %s from state %s", incident_id, incident.state.value)
         return await self.run_to_completion(incident_id)
 
+    # -- the sweeper -------------------------------------------------------
+
+    async def sweep(self) -> dict[str, Any]:
+        """Wake dormant work. Driven by Cloud Scheduler, not by a human.
+
+        An agent that only acts when someone calls it is a chatbot with extra
+        steps. This is the heartbeat that makes the fleet autonomous: it finds
+        incidents that stalled because a process died without leaving a retry,
+        and approvals nobody answered, and moves both forward.
+        """
+        await self.ensure_ready()
+        now = utcnow()
+        resumed: list[str] = []
+        expired: list[str] = []
+        stall_after = dt.timedelta(seconds=self._settings.sweep_stalled_after_seconds)
+        max_age = dt.timedelta(seconds=self._settings.incident_max_duration_seconds)
+
+        # 1. Approvals nobody answered in time. An unanswered approval is a
+        #    refusal, not a licence to proceed.
+        pending = await self._store.query(
+            self._settings.collection_approvals, where=[("resolved", "==", False)]
+        )
+        for raw in pending:
+            expires_at = raw.get("expires_at")
+            if not expires_at or _parse(expires_at) > now:
+                continue
+            try:
+                await self.resolve_approval(
+                    raw["approval_id"], approved=False, resolved_by="interlock/sweeper",
+                    justification=(
+                        "No human answered within the approval window, so the request "
+                        "expired closed."
+                    ),
+                )
+                expired.append(raw["approval_id"])
+            except OrchestratorError as exc:
+                logger.warning("could not expire approval %s: %s", raw.get("approval_id"), exc)
+
+        # 2. Incidents that stopped making progress.
+        incidents = await self._store.query(self._settings.collection_incidents)
+        for raw in incidents:
+            state = raw.get("state", "")
+            if state in ("RESOLVED", "ESCALATED", "FAILED", "AWAITING_APPROVAL"):
+                continue
+            updated = _parse(raw.get("updated_at"))
+            incident_id = raw.get("incident_id", "")
+            if not incident_id:
+                continue
+
+            # Give up on incidents that have run far too long rather than
+            # letting them consume budget indefinitely.
+            if now - _parse(raw.get("opened_at")) > max_age:
+                incident = await self.get_incident(incident_id)
+                if incident:
+                    incident.escalation_reason = (
+                        "Incident exceeded its maximum duration without reaching a "
+                        "conclusion and was escalated by the sweeper."
+                    )
+                    await self._transition(incident, IncidentState.ESCALATED, "exceeded max duration")
+                    await self._close(incident)
+                    expired.append(incident_id)
+                continue
+
+            if now - updated < stall_after:
+                continue
+
+            logger.info("sweeper resuming stalled incident %s (state=%s)", incident_id, state)
+            try:
+                await self.resume(incident_id)
+                resumed.append(incident_id)
+            except Exception as exc:  # noqa: BLE001 - one bad incident must not stop the sweep
+                logger.exception("could not resume %s: %s", incident_id, exc)
+
+        result = {
+            "swept_at": now.isoformat(),
+            "incidents_resumed": resumed,
+            "approvals_expired": expired,
+            "incidents_examined": len(incidents),
+        }
+        if resumed or expired:
+            logger.info("sweep: resumed %d, expired %d", len(resumed), len(expired))
+        return result
+
     # -- approvals ---------------------------------------------------------
 
     async def resolve_approval(
@@ -539,6 +704,17 @@ class IncidentOrchestrator:
         incident = await self.get_incident(approval.incident_id)
         if incident is None:
             raise OrchestratorError("incident vanished while resolving approval")
+
+        # Record the human's decision so the fleet does not relitigate it on the
+        # next incident for this service.
+        await self._memory.remember_governance_outcome(
+            service=incident.alert.resource_name,
+            incident_id=incident.incident_id,
+            action_type=approval.proposal.action_type,
+            approved=approved,
+            resolved_by=resolved_by,
+            justification=justification,
+        )
 
         await self._store.patch(
             self._settings.collection_incidents,

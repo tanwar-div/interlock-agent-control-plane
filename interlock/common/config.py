@@ -69,6 +69,31 @@ class Settings(BaseSettings):
     # How long a pending human approval blocks before it expires closed.
     approval_timeout_seconds: int = Field(default=3_600)
 
+    # --- Context management -----------------------------------------------
+    # A long-running incident accumulates far more events than a chat turn.
+    # ADK compacts older events into summaries so the model keeps working from
+    # a bounded context instead of an ever-growing transcript.
+    compaction_interval: int = Field(default=4, description="Events between compactions.")
+    compaction_overlap: int = Field(default=1, description="Events of overlap between summaries.")
+    compaction_enabled: bool = Field(default=True)
+    # Let ADK snapshot and resume an interrupted invocation.
+    adk_resumable: bool = Field(default=True)
+
+    # --- Memory -----------------------------------------------------------
+    # Cross-incident recall: what this service has done before, and what
+    # operators decided last time.
+    memory_enabled: bool = Field(default=True)
+    collection_memories: str = Field(default="memories")
+    memory_recall_limit: int = Field(default=6)
+    # Memories older than this stop being surfaced. What mattered a month ago
+    # about a service that has been rewritten since is noise, not context.
+    memory_ttl_days: int = Field(default=90)
+
+    # --- Sweeper ----------------------------------------------------------
+    # Cloud Scheduler wakes the control plane on this cadence so dormant work
+    # progresses without anyone watching.
+    sweep_stalled_after_seconds: int = Field(default=900)
+
     # --- Identity ---------------------------------------------------------
     trust_domain: str = Field(default="interlock.internal")
     signing_key_secret: str = Field(default="interlock-ledger-signing-key")

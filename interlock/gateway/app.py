@@ -38,6 +38,7 @@ from interlock.common.telemetry import (
 )
 from interlock.identity.registry import AgentRegistry
 from interlock.ledger.ledger import Ledger
+from interlock.memory.service import IncidentMemory
 from interlock.policy.engine import PolicyEngine
 from interlock.runtime.orchestrator import IncidentOrchestrator
 
@@ -263,6 +264,55 @@ async def resume_incident(incident_id: str, background: BackgroundTasks) -> dict
         "checkpoint": checkpoint.checkpoint_id if checkpoint else None,
         "revision": incident.revision,
     }
+
+
+# ---------------------------------------------------------------------------
+# The heartbeat
+# ---------------------------------------------------------------------------
+
+
+@app.post("/v1/sweep")
+async def sweep() -> dict[str, Any]:
+    """Wake dormant work: resume stalled incidents, expire unanswered approvals.
+
+    Cloud Scheduler calls this on a fixed cadence. It is what makes the fleet
+    autonomous rather than merely reactive — progress does not depend on anyone
+    being awake to ask for it.
+    """
+    return await orchestrator.sweep()
+
+
+@app.post("/v1/pubsub/sweep", status_code=204)
+async def pubsub_sweep(request: Request) -> JSONResponse:
+    try:
+        await request.json()
+    except Exception:  # noqa: BLE001 - Scheduler may send an empty body
+        pass
+    await orchestrator.sweep()
+    return JSONResponse(status_code=204, content=None)
+
+
+# ---------------------------------------------------------------------------
+# Memory
+# ---------------------------------------------------------------------------
+
+
+@app.get("/v1/memory")
+async def list_memory(service: str = "", limit: int = 100) -> dict[str, Any]:
+    """What the fleet has learned, and from which incidents."""
+    memory = IncidentMemory()
+    rows = (
+        await memory.recall(service=service, limit=limit)
+        if service
+        else await memory.all_memories(limit=limit)
+    )
+    return {"count": len(rows), "service": service or "(all)", "memories": rows}
+
+
+@app.get("/v1/memory/brief")
+async def memory_brief(service: str) -> dict[str, Any]:
+    """The exact recall block injected into an agent's brief for this service."""
+    return {"service": service, "brief": await IncidentMemory().recall_brief(service=service)}
 
 
 # ---------------------------------------------------------------------------
