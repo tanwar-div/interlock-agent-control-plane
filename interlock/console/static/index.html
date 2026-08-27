@@ -92,6 +92,12 @@ label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.7p
 .agent{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:7px;margin-bottom:7px;background:var(--panel);font-size:12.5px}
 .agent .n{font-weight:600}
 .agent .sp{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:2px}
+.mem{border:1px solid var(--line);border-radius:7px;padding:9px 11px;margin-bottom:7px;background:var(--panel);font-size:12.5px}
+.mem.gov{border-color:#4a3a12;background:linear-gradient(180deg,#1a1608,#151106)}
+.mem .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);margin-bottom:3px}
+.mem.gov .k{color:#e3b341}
+.mem .s{color:var(--muted);line-height:1.45}
+.mem .n{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:4px}
 .chain{display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:7px;font-size:12px;margin-bottom:12px;font-family:var(--mono)}
 .chain.ok{background:#0f2417;border:1px solid #1f5c33;color:#56c463}
 .chain.bad{background:#2b1212;border:1px solid #5c1f1f;color:#f85149}
@@ -109,7 +115,9 @@ label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.7p
   <div class="stat"><b id="st-inc">0</b>incidents</div>
   <div class="stat"><b id="st-appr">0</b>pending approvals</div>
   <div class="stat"><b id="st-act">0</b>catalogued actions</div>
+  <div class="stat"><b id="st-mem">0</b>memories</div>
   <div class="stat"><b id="st-model">—</b>reasoning model</div>
+  <button id="sweepbtn" onclick="sweep()" style="flex:0 0 auto;width:auto;padding:7px 14px;margin-left:14px">Run heartbeat</button>
 </header>
 <main>
   <div class="col">
@@ -135,6 +143,8 @@ label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.7p
       <button onclick="runSim()">Score this action</button>
       <div class="simout" id="sim-out"></div>
     </div>
+    <h2 style="margin-top:20px">What the fleet has learned <span class="count" id="c-mem"></span></h2>
+    <div id="memory"></div>
     <h2 style="margin-top:20px">Registered agents</h2>
     <div id="agents"></div>
   </div>
@@ -184,7 +194,26 @@ async function tick(){
       <div class="btns"><button class="ok" onclick="decide('${a.approval_id}',true)">Approve</button>
       <button class="no" onclick="decide('${a.approval_id}',false)">Deny</button></div></div>`;}).join('')
     :'<div class="empty">Nothing is waiting on a human.</div>';
+  const mem=await j('/v1/memory');
+  $('#st-mem').textContent=mem.count; $('#c-mem').textContent=mem.count;
+  $('#memory').innerHTML=mem.memories.length?mem.memories.map(m=>{
+    const gov=m.kind==='governance_outcome';
+    return `<div class="mem ${gov?'gov':''}">
+      <div class="k">${esc(m.kind.replace(/_/g,' '))} · ${esc(m.service)}</div>
+      <div class="s">${esc(m.summary)}</div>
+      <div class="n">${m.occurrences>1?`seen ${m.occurrences}x · `:''}weight ${Number(m.weight).toFixed(1)}${(m.incidents||[]).length?` · ${m.incidents.length} incident${m.incidents.length>1?'s':''}`:''}</div>
+    </div>`;}).join('')
+    :'<div class="empty">The fleet has not learned anything yet. Close an incident and it will.</div>';
   if(sel) render(sel);
+}
+
+async function sweep(){
+  const b=$('#sweepbtn'); b.textContent='Sweeping…'; b.disabled=true;
+  try{
+    const r=await j('/v1/sweep',{method:'POST'});
+    b.textContent=`resumed ${r.incidents_resumed.length} · expired ${r.approvals_expired.length}`;
+  }catch(e){ b.textContent='sweep failed'; }
+  setTimeout(()=>{b.textContent='Run heartbeat';b.disabled=false;tick();},2600);
 }
 
 async function decide(id,ok){
