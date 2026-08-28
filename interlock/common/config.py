@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # produced the work, so a systematic reasoning error is less likely to be
     # reproduced identically by its own reviewer.
     auditor_model: str = Field(default="gemini-3.5-flash")
+    # Blast-radius assessment. Runs stateless, sees only the action and its
+    # arguments, and never sees the proposing agent's reasoning.
+    scoring_model: str = Field(default="gemini-3.5-flash")
+    model_scoring_enabled: bool = Field(default=True)
 
     # --- Firestore --------------------------------------------------------
     firestore_database: str = Field(default="(default)")

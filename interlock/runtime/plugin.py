@@ -31,7 +31,7 @@ from typing import Any
 from google.adk.plugins import BasePlugin
 
 from interlock.armor.guard import Guard, get_guard
-from interlock.blastradius.scorer import score_proposal
+from interlock.blastradius.scorer import score_proposal_with_model
 from interlock.common.config import get_settings
 from interlock.common.models import (
     ActionProposal,
@@ -185,8 +185,13 @@ class InterlockPlugin(BasePlugin):
         incident = await self._incident(incident_id)
         budget_remaining = self._settings.incident_budget_usd - (incident.spend_usd if incident else 0.0)
 
-        # 2. Blast radius (deterministic)
-        radius = score_proposal(proposal, budget_remaining_usd=budget_remaining)
+        # 2. Blast radius. A model assesses the action and its arguments; the
+        #    deterministic heuristics remain the floor, so the assessment can
+        #    add danger and never remove it. If the model is unavailable the
+        #    heuristics score alone.
+        radius = await score_proposal_with_model(
+            proposal, budget_remaining_usd=budget_remaining
+        )
 
         # 3. Guard the agent's own stated rationale. Untrusted input is
         #    inspected where it enters, in after_tool_callback.
@@ -229,6 +234,8 @@ class InterlockPlugin(BasePlugin):
                 "reversibility": radius.reversibility.value,
                 "cost_ceiling_usd": radius.cost_ceiling_usd,
                 "factors": radius.factors,
+                "scored_by": radius.scored_by,
+                "model_assessment": radius.model_assessment,
             },
         )
         await self._ledger.append(

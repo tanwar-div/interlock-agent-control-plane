@@ -230,6 +230,12 @@ class BlastRadius(BaseModel):
     # True when the action type was not found in the catalogue and the scorer
     # therefore assumed worst case.
     unknown_action: bool = False
+    # Which path produced this score: "deterministic" when the heuristics ran,
+    # "model" when a language model assessed the arguments, or
+    # "model+floor" when the model ran and the human catalogue raised it.
+    scored_by: str = "deterministic"
+    # The model's own dimension values, before clamping, kept for comparison.
+    model_assessment: dict[str, Any] | None = None
 
 
 class GuardVerdict(BaseModel):
