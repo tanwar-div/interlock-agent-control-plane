@@ -43,6 +43,18 @@ KIND_FAULT = "fault_pattern"
 
 _KIND_PRIORITY = {KIND_GOVERNANCE: 0, KIND_REMEDIATION: 1, KIND_FAULT: 2}
 
+# Memories expire at different rates because they age at different rates. A
+# human's decision about what is acceptable stays true until a human revisits
+# it. An observation that an action failed is a fact about one moment in a
+# mutable environment: permissions get granted, quotas get raised, deployments
+# get fixed. Carrying such an observation for months is how a fleet talks
+# itself out of trying something that would now succeed.
+_KIND_TTL_DAYS = {
+    KIND_GOVERNANCE: None,      # falls back to the configured TTL
+    KIND_REMEDIATION: 14,
+    KIND_FAULT: 30,
+}
+
 
 def _aware(value: Any) -> dt.datetime:
     if isinstance(value, dt.datetime):
@@ -167,8 +179,15 @@ class IncidentMemory:
             return []
 
         rows = await self._store.query(self._collection, where=[("service", "==", service)])
-        cutoff = utcnow() - dt.timedelta(days=self._settings.memory_ttl_days)
-        live = [r for r in rows if _aware(r.get("last_seen")) >= cutoff]
+        now = utcnow()
+
+        def _is_live(row: dict[str, Any]) -> bool:
+            days = _KIND_TTL_DAYS.get(row.get("kind", ""), None)
+            if days is None:
+                days = self._settings.memory_ttl_days
+            return _aware(row.get("last_seen")) >= now - dt.timedelta(days=days)
+
+        live = [r for r in rows if _is_live(r)]
 
         # Human decisions first, then reinforcement, then recency.
         live.sort(
@@ -186,17 +205,39 @@ class IncidentMemory:
         if not memories:
             return ""
 
-        lines = ["WHAT IS ALREADY KNOWN ABOUT THIS SERVICE:"]
-        for memory in memories:
-            seen = ""
-            if int(memory.get("occurrences", 1)) > 1:
-                seen = f" (seen {memory['occurrences']} times)"
-            lines.append(f"- [{memory.get('kind')}] {memory.get('summary')}{seen}")
-        lines.append(
-            "\nTreat governance_outcome entries as binding precedent: if a human has "
-            "already refused an action on this service, do not propose it again "
-            "unless the circumstances are materially different, and say what changed."
-        )
+        governance = [m for m in memories if m.get("kind") == KIND_GOVERNANCE]
+        observations = [m for m in memories if m.get("kind") != KIND_GOVERNANCE]
+        lines: list[str] = []
+
+        if governance:
+            lines.append("DECISIONS A HUMAN HAS ALREADY MADE ABOUT THIS SERVICE (binding):")
+            for memory in governance:
+                lines.append(f"- {memory.get('summary')}")
+            lines.append(
+                "These are precedent. Do not propose an action a human has refused here "
+                "unless circumstances are materially different, and say what changed."
+            )
+
+        if observations:
+            if lines:
+                lines.append("")
+            lines.append("WHAT PAST INCIDENTS ON THIS SERVICE OBSERVED (context, not fact):")
+            for memory in observations:
+                seen = ""
+                if int(memory.get("occurrences", 1)) > 1:
+                    seen = f" (seen {memory['occurrences']} times)"
+                lines.append(f"- {memory.get('summary')}{seen}")
+            lines.append(
+                "\nThese are observations from earlier incidents, not statements about the "
+                "system as it is now. Environments change between incidents: permissions "
+                "are granted, quotas are raised, bad deployments are replaced.\n"
+                "Use them to know where to look first. NEVER use them as a reason to skip "
+                "an action or to declare something impossible. In particular, if a past "
+                "incident records that an action failed, you must still attempt that action "
+                "and observe what happens now — a remembered failure is a hypothesis to "
+                "test, not a result to report. Only what you observe in this incident may "
+                "be stated as fact."
+            )
         return "\n".join(lines)
 
     async def forget_service(self, service: str) -> int:

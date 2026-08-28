@@ -67,7 +67,7 @@ async def test_brief_instructs_the_agent_to_treat_denials_as_precedent(clean_sto
         approved=False, resolved_by="oncall", justification="no evidence capacity is the problem",
     )
     brief = await memory.recall_brief(service="api")
-    assert "binding precedent" in brief
+    assert "binding" in brief
     assert "compute.instances.insert" in brief
     assert "no evidence capacity is the problem" in brief
 
@@ -97,3 +97,50 @@ async def test_incident_outcomes_become_memory(clean_store):
 
     rows = await IncidentMemory().recall(service="checkout-api")
     assert any(r["kind"] == KIND_REMEDIATION and "rolled back to v41" in r["summary"] for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_a_remembered_failure_must_not_suppress_a_retry(clean_store):
+    """A fleet that remembers 'this failed' and never retries can never learn
+    that the cause was fixed. Observations must be framed as hypotheses."""
+    memory = IncidentMemory()
+    await memory.remember(
+        service="checkout-api", kind=KIND_REMEDIATION,
+        summary="Rollback failed with HTTP 403 on Artifact Registry", incident_id="inc_old",
+    )
+    brief = await memory.recall_brief(service="checkout-api")
+
+    assert "context, not fact" in brief
+    assert "NEVER use them as a reason to skip an action" in brief
+    assert "a hypothesis to test, not a result to report" in brief
+    # And it must not be presented under the binding-precedent heading.
+    assert brief.index("observations from earlier incidents") > brief.index("Rollback failed")
+
+
+@pytest.mark.asyncio
+async def test_operational_memories_expire_sooner_than_human_decisions(clean_store):
+    import datetime as dt
+
+    memory = IncidentMemory()
+    stale_obs = await memory.remember(
+        service="api", kind=KIND_REMEDIATION, summary="an old operational observation"
+    )
+    decision = await memory.remember_governance_outcome(
+        service="api", incident_id="i", action_type="sql.instances.delete",
+        approved=False, resolved_by="oncall", justification="never acceptable",
+    )
+    thirty_days_ago = (utcnow_() - dt.timedelta(days=30)).isoformat()
+    for record in (stale_obs, decision):
+        record["last_seen"] = thirty_days_ago
+        await clean_store.put("memories", record["memory_id"], record)
+
+    rows = await memory.recall(service="api")
+    kinds = {r["kind"] for r in rows}
+    # The human decision survives; the 30-day-old operational note does not.
+    assert KIND_GOVERNANCE in kinds
+    assert KIND_REMEDIATION not in kinds
+
+
+def utcnow_():
+    from interlock.common.models import utcnow
+    return utcnow()

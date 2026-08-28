@@ -309,6 +309,17 @@ async def list_memory(service: str = "", limit: int = 100) -> dict[str, Any]:
     return {"count": len(rows), "service": service or "(all)", "memories": rows}
 
 
+@app.delete("/v1/memory")
+async def forget(service: str) -> dict[str, Any]:
+    """Erase what the fleet has learned about a service.
+
+    Needed when the environment has changed so fundamentally that prior
+    observations are misleading rather than merely stale.
+    """
+    removed = await IncidentMemory().forget_service(service)
+    return {"service": service, "memories_removed": removed}
+
+
 @app.get("/v1/memory/brief")
 async def memory_brief(service: str) -> dict[str, Any]:
     """The exact recall block injected into an agent's brief for this service."""

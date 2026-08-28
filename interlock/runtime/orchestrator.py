@@ -630,10 +630,16 @@ class IncidentOrchestrator:
                 incident_id=incident.incident_id, weight=2.0,
             )
         elif incident.state is IncidentState.ESCALATED and incident.escalation_reason:
+            # Deliberately short and hedged. A long verbatim escalation reads
+            # like a standing fact about the service on the next incident,
+            # which is exactly how a fleet talks itself out of retrying.
             await self._memory.remember(
                 service=service, kind=KIND_REMEDIATION,
-                summary=f"Autonomous remediation did not succeed: {incident.escalation_reason[:350]}",
-                incident_id=incident.incident_id, weight=1.5,
+                summary=(
+                    "A previous incident could not be resolved autonomously and was "
+                    f"escalated. At that time: {incident.escalation_reason[:180]}"
+                ),
+                incident_id=incident.incident_id, weight=1.0,
             )
 
     async def _close(self, incident: Incident) -> None:
