@@ -30,6 +30,35 @@ export REGION="${REGION:-us-central1}"
 gcloud config set project "${PROJECT_ID}" >/dev/null
 gcloud auth application-default set-quota-project "${PROJECT_ID}" >/dev/null 2>&1 || true
 
+say "Checking billing on ${PROJECT_ID}"
+BILLED="$(gcloud billing projects describe "${PROJECT_ID}" --format='value(billingEnabled)' 2>/dev/null || echo False)"
+if [ "${BILLED}" != "True" ]; then
+  echo
+  echo "  Billing is not enabled on ${PROJECT_ID}, so Cloud Run, Cloud Build and"
+  echo "  Artifact Registry cannot be enabled. Nothing else will work without it."
+  echo
+  ACCOUNTS="$(gcloud billing accounts list --filter=open=true --format='value(name)' 2>/dev/null || true)"
+  if [ -n "${ACCOUNTS}" ]; then
+    FIRST="$(echo "${ACCOUNTS}" | head -1)"
+    echo "  Found an open billing account: ${FIRST}"
+    read -rp "  Link it to ${PROJECT_ID}? [Y/n] " REPLY
+    if [ "${REPLY:-Y}" = "Y" ] || [ "${REPLY:-Y}" = "y" ]; then
+      gcloud billing projects link "${PROJECT_ID}" --billing-account="${FIRST}" --quiet
+      echo "  linked."
+    else
+      exit 1
+    fi
+  else
+    echo "  No billing account is visible on this login. Either sign in with the"
+    echo "  account that has one, or create one at:"
+    echo "    https://console.cloud.google.com/billing"
+    echo
+    echo "  Then re-run ./bootstrap.sh"
+    exit 1
+  fi
+fi
+echo "    billing is enabled"
+
 say "Using project ${PROJECT_ID} in ${REGION}"
 ./deploy/scripts/00-setup.sh
 ./deploy/scripts/01-deploy.sh
