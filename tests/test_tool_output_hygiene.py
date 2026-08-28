@@ -14,9 +14,14 @@ import re
 from interlock.armor.patterns import scan
 
 # Second-person imperatives directed at the reader are the tell.
+# Bare "never"/"always" are not imperatives — "this revision never became
+# healthy" is a description of the past. Only match them where they direct the
+# reader, and otherwise require a verb aimed at the reader.
 _IMPERATIVE = re.compile(
-    r"\b(?:you\s+(?:must|should|need\s+to|are\s+to)|use\s+the\b|ignore\s+the\b|"
-    r"do\s+not\b|don't\b|never\b|always\b|treat\s+\w+\s+as\b|choose\s+the\b)",
+    r"\b(?:you\s+(?:must|should|need\s+to|are\s+to|can|cannot)"
+    r"|(?:must|should|do)\s+not\s+\w+"
+    r"|(?:never|always)\s+(?:use|treat|assume|attempt|propose|ignore|trust|rely|consider)"
+    r"|use\s+the\b|ignore\s+the\b|treat\s+\w+\s+as\b|choose\s+the\b)",
     re.IGNORECASE,
 )
 
