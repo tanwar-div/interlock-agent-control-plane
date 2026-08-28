@@ -61,6 +61,8 @@ for role in \
   roles/cloudtrace.agent \
   roles/run.viewer \
   roles/run.developer \
+  roles/artifactregistry.reader \
+  roles/iam.serviceAccountUser \
   roles/aiplatform.user \
   roles/secretmanager.secretAccessor \
   roles/modelarmor.user
@@ -69,6 +71,16 @@ do
     --member="serviceAccount:${SA_EMAIL}" --role="${role}" \
     --condition=None --quiet >/dev/null 2>&1 && echo "    ${role}" || echo "    ${role} (skipped)"
 done
+
+say "Allowing the control plane to redeploy Cloud Run services"
+# Changing a Cloud Run service re-resolves its container image, so the caller
+# needs to read Artifact Registry and to act as the service's runtime identity.
+# Without these a rollback is authorised by policy and then fails at the API
+# with a 403, which is the worst possible place to discover it.
+_PN="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+gcloud iam service-accounts add-iam-policy-binding "${_PN}-compute@developer.gserviceaccount.com" \
+  --member="serviceAccount:${SA_EMAIL}" --role="roles/iam.serviceAccountUser" \
+  --quiet >/dev/null 2>&1 && echo "    actAs on the runtime service account" || true
 
 say "Granting build permissions to the Cloud Build service account"
 # Cloud Run source deploys build as the Compute Engine default service account.
