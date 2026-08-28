@@ -249,16 +249,16 @@ def list_revisions(*, service: str, limit: int = 10) -> dict[str, Any]:
         healthy = ready == "CONDITION_SUCCEEDED"
         serving = conditions.get("Active") == "CONDITION_SUCCEEDED"
 
+        # Descriptive, never imperative. Guidance on how to interpret these
+        # fields belongs in the agent's instruction, not in data the agent
+        # reads: content inspection cannot distinguish helpful instructions
+        # embedded in tool output from injected ones, and should not have to.
         if healthy and serving:
-            note = "healthy and currently serving traffic"
+            status = "ready; instances currently running"
         elif healthy:
-            note = (
-                "healthy, but scaled to zero with no instances running. This is the "
-                "normal resting state for a revision that is not receiving traffic "
-                "and does NOT prevent it being used as a rollback target."
-            )
+            status = "ready; scaled to zero, no instances currently running"
         else:
-            note = "not healthy; this revision failed to become ready and must not be rolled back to"
+            status = "not ready; this revision never became healthy"
 
         rendered.append(
             {
@@ -267,23 +267,14 @@ def list_revisions(*, service: str, limit: int = 10) -> dict[str, Any]:
                 "image": rev.containers[0].image if rev.containers else "",
                 "healthy": healthy,
                 "serving_traffic": serving,
-                "note": note,
+                "status": status,
                 # Kept for completeness, but after the plain-language fields so
                 # the interpretation is read first.
                 "raw_conditions": conditions,
                 "ready": ready,
             }
         )
-    return {
-        "service": service,
-        "revision_count": len(rendered),
-        "guidance": (
-            "Use the 'healthy' field to judge whether a revision is a valid rollback "
-            "target. Ignore 'serving_traffic' for that purpose: it only reports whether "
-            "instances are running right now."
-        ),
-        "revisions": rendered,
-    }
+    return {"service": service, "revision_count": len(rendered), "revisions": rendered}
 
 
 # ---------------------------------------------------------------------------
