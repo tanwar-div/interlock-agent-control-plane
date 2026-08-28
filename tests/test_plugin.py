@@ -235,3 +235,29 @@ async def test_every_decision_lands_in_the_ledger(clean_store):
     assert "POLICY_DECISION" in kinds
     report = await Ledger().verify_chain("inc_test")
     assert report.valid, report.problems
+
+
+@pytest.mark.asyncio
+async def test_concurrent_appends_produce_an_unbroken_chain(clean_store):
+    """A hash chain serialises by construction; concurrency must not break it."""
+    import asyncio
+
+    from interlock.common.models import LedgerEventType
+
+    ledger = Ledger()
+    await asyncio.gather(*(
+        ledger.append(
+            incident_id="inc_test",
+            event_type=LedgerEventType.ACTION_PROPOSED,
+            actor="spiffe://test",
+            payload={"i": i},
+        )
+        for i in range(25)
+    ))
+
+    entries = await ledger.entries("inc_test")
+    assert len(entries) == 25
+    # Sequence numbers are dense and unique despite concurrent writers.
+    assert [e.sequence for e in entries] == list(range(25))
+    report = await ledger.verify_chain("inc_test")
+    assert report.valid, report.problems

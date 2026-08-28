@@ -13,7 +13,9 @@ checked rather than merely asserted.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 from typing import Any
 
 from interlock.common.config import get_settings
@@ -30,6 +32,31 @@ logger = logging.getLogger(__name__)
 
 HEADS_COLLECTION = "ledger_heads"
 GENESIS_HASH = "0" * 64
+
+# A hash chain is inherently serial: every entry commits to its predecessor, so
+# every append contends on the same head document. Agents issue tool calls
+# concurrently, and each call produces several entries, so without ordering
+# these transactions abort each other under Firestore's serializability rules.
+#
+# An incident is leased to exactly one worker, so serialising appends within the
+# process removes essentially all of the contention. The retry loop covers the
+# remainder: a lease changing hands, or the sweeper overlapping a live worker.
+_APPEND_LOCKS: dict[str, asyncio.Lock] = {}
+_APPEND_LOCKS_GUARD = asyncio.Lock()
+_MAX_APPEND_ATTEMPTS = 6
+
+
+async def _lock_for(incident_id: str) -> asyncio.Lock:
+    async with _APPEND_LOCKS_GUARD:
+        lock = _APPEND_LOCKS.get(incident_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _APPEND_LOCKS[incident_id] = lock
+            # Unbounded growth would be a slow leak across a long-lived process.
+            if len(_APPEND_LOCKS) > 512:
+                for key in [k for k, v in list(_APPEND_LOCKS.items()) if not v.locked()][:256]:
+                    _APPEND_LOCKS.pop(key, None)
+        return lock
 
 
 class ChainVerificationError(RuntimeError):
@@ -116,7 +143,26 @@ class Ledger:
             )
             return record
 
-        record = await self._store.transact(_txn)
+        lock = await _lock_for(incident_id)
+        async with lock:
+            record = None
+            for attempt in range(_MAX_APPEND_ATTEMPTS):
+                try:
+                    record = await self._store.transact(_txn)
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    # Contention is expected and recoverable; anything else is not.
+                    if "Aborted" not in type(exc).__name__ and "contention" not in str(exc):
+                        raise
+                    if attempt == _MAX_APPEND_ATTEMPTS - 1:
+                        raise
+                    delay = (0.1 * (2 ** attempt)) + random.uniform(0, 0.1)
+                    logger.warning(
+                        "ledger append contended for %s (attempt %d); retrying in %.2fs",
+                        incident_id, attempt + 1, delay,
+                    )
+                    await asyncio.sleep(delay)
+
         entry = LedgerEntry.model_validate(record)
         logger.debug(
             "ledger append incident=%s seq=%s event=%s", incident_id, entry.sequence, event_type.value

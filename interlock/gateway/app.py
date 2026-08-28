@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -160,12 +160,12 @@ async def create_alert(payload: AlertIn, background: BackgroundTasks) -> dict[st
 
 
 @app.post("/v1/pubsub/alerts", status_code=204)
-async def pubsub_alert(request: Request, background: BackgroundTasks) -> JSONResponse:
+async def pubsub_alert(request: Request, background: BackgroundTasks) -> Response:
     """Push endpoint for Cloud Monitoring notifications."""
     body = await request.json()
     payload, _ = pubsub.decode_push(body)
     if not payload:
-        return JSONResponse(status_code=204, content=None)
+        return Response(status_code=204)
 
     normalised = pubsub.parse_monitoring_alert(payload)
     await orchestrator.ensure_ready()
@@ -173,11 +173,11 @@ async def pubsub_alert(request: Request, background: BackgroundTasks) -> JSONRes
         k: v for k, v in normalised.items() if k in Alert.model_fields
     }))
     await _dispatch_phase(incident.incident_id, background)
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 @app.post("/v1/pubsub/advance", status_code=204)
-async def pubsub_advance(request: Request) -> JSONResponse:
+async def pubsub_advance(request: Request) -> Response:
     """Push endpoint that executes exactly one phase.
 
     Acknowledging only after the phase is durably checkpointed means a crash
@@ -187,12 +187,12 @@ async def pubsub_advance(request: Request) -> JSONResponse:
     payload, _ = pubsub.decode_push(body)
     incident_id = payload.get("incident_id")
     if not incident_id:
-        return JSONResponse(status_code=204, content=None)
+        return Response(status_code=204)
 
     incident = await orchestrator.advance(incident_id)
     if not incident.state.terminal and incident.state is not IncidentState.AWAITING_APPROVAL:
         pubsub.publish(settings.topic_actions, {"incident_id": incident_id, "op": "advance"})
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 @app.get("/v1/incidents")
@@ -283,13 +283,13 @@ async def sweep() -> dict[str, Any]:
 
 
 @app.post("/v1/pubsub/sweep", status_code=204)
-async def pubsub_sweep(request: Request) -> JSONResponse:
+async def pubsub_sweep(request: Request) -> Response:
     try:
         await request.json()
     except Exception:  # noqa: BLE001 - Scheduler may send an empty body
         pass
     await orchestrator.sweep()
-    return JSONResponse(status_code=204, content=None)
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
