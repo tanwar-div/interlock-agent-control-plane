@@ -239,16 +239,51 @@ def list_revisions(*, service: str, limit: int = 10) -> dict[str, Any]:
     rendered = []
     for rev in revisions[:limit]:
         conditions = {c.type_: c.state.name for c in (rev.conditions or [])}
+        # Cloud Run's raw conditions are easy to misread. "Active" is not a
+        # health signal: it is false whenever a revision has no instances
+        # running, which is the normal resting state of any revision not
+        # currently receiving traffic. Reporting that verbatim invites the
+        # conclusion that a perfectly good rollback target is broken, so the
+        # two signals are separated and named for what they mean.
+        ready = conditions.get("Ready", "UNKNOWN")
+        healthy = ready == "CONDITION_SUCCEEDED"
+        serving = conditions.get("Active") == "CONDITION_SUCCEEDED"
+
+        if healthy and serving:
+            note = "healthy and currently serving traffic"
+        elif healthy:
+            note = (
+                "healthy, but scaled to zero with no instances running. This is the "
+                "normal resting state for a revision that is not receiving traffic "
+                "and does NOT prevent it being used as a rollback target."
+            )
+        else:
+            note = "not healthy; this revision failed to become ready and must not be rolled back to"
+
         rendered.append(
             {
                 "name": rev.name.split("/")[-1],
                 "create_time": rev.create_time.isoformat() if rev.create_time else "",
                 "image": rev.containers[0].image if rev.containers else "",
-                "ready": conditions.get("Ready", "UNKNOWN"),
-                "conditions": conditions,
+                "healthy": healthy,
+                "serving_traffic": serving,
+                "note": note,
+                # Kept for completeness, but after the plain-language fields so
+                # the interpretation is read first.
+                "raw_conditions": conditions,
+                "ready": ready,
             }
         )
-    return {"service": service, "revision_count": len(rendered), "revisions": rendered}
+    return {
+        "service": service,
+        "revision_count": len(rendered),
+        "guidance": (
+            "Use the 'healthy' field to judge whether a revision is a valid rollback "
+            "target. Ignore 'serving_traffic' for that purpose: it only reports whether "
+            "instances are running right now."
+        ),
+        "revisions": rendered,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -71,12 +71,18 @@ async def _check_traffic_shift(proposal: ActionProposal) -> FreshnessVerdict:
             ),
         )
 
-    if str(target.get("ready", "")).upper() not in ("CONDITION_SUCCEEDED", "TRUE", "READY", ""):
+    # Judge on health alone. Whether the revision currently has instances
+    # running is irrelevant to whether it is a valid rollback target — a
+    # revision receiving no traffic is scaled to zero by design.
+    healthy = target.get("healthy")
+    if healthy is None:
+        healthy = str(target.get("ready", "")).upper() in ("CONDITION_SUCCEEDED", "TRUE", "READY", "")
+    if not healthy:
         return FreshnessVerdict(
             stale=True,
-            observed={"revision": revision, "ready": target.get("ready")},
+            observed={"revision": revision, "healthy": False, "ready": target.get("ready")},
             detail=(
-                f"revision '{revision}' is not currently healthy "
+                f"revision '{revision}' is not healthy "
                 f"(Ready={target.get('ready')}); rolling onto it would not restore service."
             ),
         )
