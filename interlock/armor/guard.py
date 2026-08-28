@@ -160,11 +160,24 @@ class Guard:
     # --- detector: Gemma classifier --------------------------------------
 
     def _client(self) -> Any | None:
+        """Client for the guard model.
+
+        Bound explicitly to Vertex AI at the global endpoint: the guard must
+        resolve the same way in every environment, rather than depending on
+        whichever ambient credentials or env vars happen to be set.
+        """
         if self._genai_client is None:
             try:
                 from google import genai
 
-                self._genai_client = genai.Client()
+                if self._settings.project_id:
+                    self._genai_client = genai.Client(
+                        vertexai=True,
+                        project=self._settings.project_id,
+                        location=self._settings.model_location,
+                    )
+                else:
+                    self._genai_client = genai.Client()
             except Exception as exc:  # noqa: BLE001
                 logger.debug("genai client unavailable: %s", exc)
                 return None
@@ -183,7 +196,8 @@ class Guard:
                 model=self._settings.guard_model,
                 contents=prompt,
             )
-            return (response.text or "").strip().upper()
+            text = (response.text or "").strip().upper()
+            return text.split()[0].strip(".,*:'\"") if text.split() else ""
 
         try:
             verdict = await asyncio.wait_for(asyncio.to_thread(_call), timeout=_GEMMA_TIMEOUT)

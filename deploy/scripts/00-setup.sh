@@ -70,6 +70,30 @@ do
     --condition=None --quiet >/dev/null 2>&1 && echo "    ${role}" || echo "    ${role} (skipped)"
 done
 
+say "Granting build permissions to the Cloud Build service account"
+# Cloud Run source deploys build as the Compute Engine default service account.
+# On projects created recently that account starts with no roles at all, so the
+# build cannot read the source archive it was just handed. Grant it explicitly
+# rather than relying on a default that no longer exists.
+PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+CB_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+for role in \
+  roles/cloudbuild.builds.builder \
+  roles/storage.objectViewer \
+  roles/logging.logWriter \
+  roles/artifactregistry.writer
+do
+  gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member="serviceAccount:${CB_SA}" --role="${role}" \
+    --condition=None --quiet >/dev/null 2>&1 && echo "    ${role}" || echo "    ${role} (skipped)"
+done
+
+# The deploying human must be allowed to run Cloud Run as the control plane SA.
+DEPLOYER="$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | head -1)"
+gcloud iam service-accounts add-iam-policy-binding "${SA_EMAIL}" \
+  --member="user:${DEPLOYER}" --role="roles/iam.serviceAccountUser" \
+  --quiet >/dev/null 2>&1 && echo "    serviceAccountUser for ${DEPLOYER}" || true
+
 say "Creating the ledger signing key in Secret Manager"
 if ! gcloud secrets describe interlock-ledger-signing-key >/dev/null 2>&1; then
   python3 - <<'PY' > /tmp/interlock-key.pem

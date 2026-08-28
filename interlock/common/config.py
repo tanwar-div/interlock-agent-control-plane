@@ -17,7 +17,11 @@ class Settings(BaseSettings):
 
     # --- Google Cloud -----------------------------------------------------
     project_id: str = Field(default="", description="Google Cloud project id.")
-    location: str = Field(default="us-central1", description="Primary region.")
+    location: str = Field(default="us-central1", description="Region for infrastructure.")
+    # Gemini and Gemma are served from the global endpoint, not from a regional
+    # one. Requesting them regionally returns 404/FAILED_PRECONDITION even
+    # though the models appear in the regional catalogue.
+    model_location: str = Field(default="global", description="Endpoint for model calls.")
 
     # --- Models -----------------------------------------------------------
     # Gemini 3.6 Flash is the reasoning model: cheaper than 3.5 Flash and
@@ -27,7 +31,9 @@ class Settings(BaseSettings):
     # A deliberately separate, smaller model performs the always-on guard
     # classification. Keeping the guard off the reasoning model means a
     # compromised reasoning context cannot silently disable its own guard.
-    guard_model: str = Field(default="gemma-3-12b-it")
+    # The serverless ("-maas") Gemma variant: callable directly, with no
+    # endpoint to deploy and keep warm.
+    guard_model: str = Field(default="gemma-4-26b-a4b-it-maas")
     # The auditor runs on a different model family/config from the worker that
     # produced the work, so a systematic reasoning error is less likely to be
     # reproduced identically by its own reviewer.
