@@ -76,11 +76,14 @@ class IncidentMemory:
         if not self._settings.memory_enabled or not service or not summary:
             return {}
 
-        existing = await self._store.query(
-            self._collection,
-            where=[("service", "==", service), ("kind", "==", kind), ("summary", "==", summary)],
-            limit=1,
+        # Single-field filter, matched in process, for the same reason the
+        # ledger avoids composite queries.
+        candidates = await self._store.query(
+            self._collection, where=[("service", "==", service)]
         )
+        existing = [
+            r for r in candidates if r.get("kind") == kind and r.get("summary") == summary
+        ]
         if existing:
             record = existing[0]
             record["occurrences"] = int(record.get("occurrences", 1)) + 1

@@ -334,6 +334,11 @@ class Incident(BaseModel):
     escalation_reason: str = ""
     pending_approval_id: str | None = None
     ledger_head: str = ""
+    # Cooperative lease. Pub/Sub delivers at least once, so the same phase can
+    # be dispatched to two workers concurrently; whoever holds an unexpired
+    # lease is the one permitted to advance this incident.
+    lease_until: dt.datetime | None = None
+    lease_owner: str = ""
 
     def is_over_budget(self, limit: float) -> bool:
         return self.spend_usd >= limit

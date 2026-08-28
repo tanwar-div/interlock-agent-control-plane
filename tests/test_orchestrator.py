@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from interlock.common.models import Alert, IncidentState, Severity
+from interlock.common.models import Alert, IncidentState, Severity, utcnow
 from interlock.ledger.ledger import Ledger
 from interlock.runtime.orchestrator import IncidentOrchestrator
 
@@ -200,3 +200,45 @@ async def test_fleet_registers_with_least_privilege(clean_store):
     # Remediation can act, but cannot reach catastrophic actions.
     assert remediation.max_severity is Severity.HIGH
     assert "run.services.rollback" in remediation.allowed_tools
+
+
+@pytest.mark.asyncio
+async def test_only_one_worker_may_advance_an_incident(clean_store):
+    """Pub/Sub is at-least-once; a redelivered phase must not run twice."""
+    orch = StubOrchestrator()
+    incident = await _open(orch)
+
+    token = await orch._acquire_lease(incident.incident_id)
+    assert token is not None
+    # A second worker arriving while the first holds the lease is turned away.
+    assert await orch._acquire_lease(incident.incident_id) is None
+
+    await orch._release_lease(incident.incident_id, token)
+    assert await orch._acquire_lease(incident.incident_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_advances_run_the_phase_once(clean_store):
+    import asyncio
+
+    orch = StubOrchestrator()
+    incident = await _open(orch)
+    await asyncio.gather(*(orch.advance(incident.incident_id) for _ in range(4)))
+    # Four simultaneous deliveries, one execution of the triage phase.
+    assert orch.phases_run.count("triage") == 1
+
+
+@pytest.mark.asyncio
+async def test_an_expired_lease_can_be_reclaimed(clean_store):
+    """A worker that dies holding a lease must not block the incident forever."""
+    import datetime as dt
+
+    orch = StubOrchestrator()
+    incident = await _open(orch)
+    await orch._acquire_lease(incident.incident_id, ttl_seconds=1)
+
+    raw = await clean_store.get("incidents", incident.incident_id)
+    raw["lease_until"] = (utcnow() - dt.timedelta(seconds=5)).isoformat()
+    await clean_store.put("incidents", incident.incident_id, raw)
+
+    assert await orch._acquire_lease(incident.incident_id) is not None

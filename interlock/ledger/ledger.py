@@ -127,12 +127,17 @@ class Ledger:
         return await self._store.get(HEADS_COLLECTION, incident_id)
 
     async def entries(self, incident_id: str, *, limit: int | None = None) -> list[LedgerEntry]:
+        # Deliberately an equality-only query, ordered in process. Combining a
+        # filter with an order_by would oblige every deployment to provision a
+        # composite index before the ledger could be read at all. A single
+        # incident's chain is bounded at a few hundred entries, so ordering
+        # here costs nothing and removes a deployment prerequisite.
         rows = await self._store.query(
-            self._collection,
-            where=[("incident_id", "==", incident_id)],
-            order_by="sequence",
-            limit=limit,
+            self._collection, where=[("incident_id", "==", incident_id)]
         )
+        rows.sort(key=lambda r: int(r.get("sequence", 0)))
+        if limit:
+            rows = rows[:limit]
         return [LedgerEntry.model_validate(r) for r in rows]
 
     async def verify_chain(self, incident_id: str) -> VerificationReport:

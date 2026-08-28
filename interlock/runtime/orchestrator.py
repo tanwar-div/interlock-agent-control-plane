@@ -17,6 +17,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import uuid
 from typing import Any
 
 from google.adk.apps.app import App
@@ -35,6 +36,7 @@ from interlock.common.models import (
     Incident,
     IncidentState,
     LedgerEventType,
+    new_id,
     utcnow,
 )
 from interlock.common.store import DocumentStore, get_store
@@ -226,11 +228,55 @@ class IncidentOrchestrator:
         rows = await self._store.query(
             self._settings.collection_checkpoints,
             where=[("incident_id", "==", incident_id)],
-            order_by="revision",
-            descending=True,
-            limit=1,
         )
-        return Checkpoint.model_validate(rows[0]) if rows else None
+        if not rows:
+            return None
+        rows.sort(key=lambda r: (int(r.get("revision", 0)), str(r.get("created_at", ""))))
+        return Checkpoint.model_validate(rows[-1])
+
+    # -- concurrency -------------------------------------------------------
+
+    async def _acquire_lease(self, incident_id: str, *, ttl_seconds: int = 600) -> str | None:
+        """Claim exclusive right to advance an incident.
+
+        Pub/Sub is at-least-once, so the same advance message can arrive at two
+        instances at once. Without this, both would run the same phase and the
+        remediation could be applied twice. The lease is taken inside a
+        transaction so exactly one caller wins.
+
+        Returns the lease token on success, or None if someone else holds it.
+        """
+        token = new_id("lease")
+        now = utcnow()
+        collection = self._settings.collection_incidents
+
+        def _txn(view: Any) -> str | None:
+            raw = view.get(collection, incident_id)
+            if raw is None:
+                return None
+            held_until = raw.get("lease_until")
+            if held_until and _parse(held_until) > now:
+                return None
+            raw["lease_until"] = (now + dt.timedelta(seconds=ttl_seconds)).isoformat()
+            raw["lease_owner"] = token
+            view.put(collection, incident_id, raw)
+            return token
+
+        return await self._store.transact(_txn)
+
+    async def _release_lease(self, incident_id: str, token: str) -> None:
+        collection = self._settings.collection_incidents
+
+        def _txn(view: Any) -> None:
+            raw = view.get(collection, incident_id)
+            # Only clear a lease we still hold; a lease that already expired and
+            # was reclaimed by someone else must not be cleared from under them.
+            if raw is not None and raw.get("lease_owner") == token:
+                raw["lease_until"] = None
+                raw["lease_owner"] = ""
+                view.put(collection, incident_id, raw)
+
+        await self._store.transact(_txn)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -276,7 +322,9 @@ class IncidentOrchestrator:
         assert self._plugin is not None
         card = self._cards[agent_key]
 
-        session_id = f"{incident.session_id}_{session_suffix}"
+        # Unique per attempt: a redelivered or retried phase must not collide
+        # with the session its predecessor created.
+        session_id = f"{incident.session_id}_{session_suffix}_{incident.revision}_{uuid.uuid4().hex[:6]}"
         initial_state = {
             "incident_id": incident.incident_id,
             "actor_spiffe": card.spiffe_id,
@@ -396,6 +444,17 @@ class IncidentOrchestrator:
         if incident.state is IncidentState.AWAITING_APPROVAL:
             return incident
 
+        lease = await self._acquire_lease(incident_id)
+        if lease is None:
+            logger.info("incident %s is already being advanced elsewhere; skipping", incident_id)
+            return incident
+
+        try:
+            return await self._advance_locked(incident_id, incident)
+        finally:
+            await self._release_lease(incident_id, lease)
+
+    async def _advance_locked(self, incident_id: str, incident: Incident) -> Incident:
         if incident.state is IncidentState.RECEIVED:
             await self._transition(incident, IncidentState.TRIAGING, "beginning triage")
 
