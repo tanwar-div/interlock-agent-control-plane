@@ -24,10 +24,12 @@ class Settings(BaseSettings):
     model_location: str = Field(default="global", description="Endpoint for model calls.")
 
     # --- Models -----------------------------------------------------------
-    # Gemini 3.6 Flash is the reasoning model: cheaper than 3.5 Flash and
-    # measurably stronger at agentic planning. Anything >= 3.5 satisfies the
-    # hackathon requirement.
-    reasoning_model: str = Field(default="gemini-3.6-flash")
+    # Gemini 3.5 Flash, deliberately not the newest model available.
+    # The newest release carries the most contended quota, and an agent fleet
+    # makes many calls per incident, so it is the first thing to hit 429
+    # RESOURCE_EXHAUSTED. A slightly older model with headroom finishes
+    # incidents; a newer one that is rate limited does not.
+    reasoning_model: str = Field(default="gemini-3.5-flash")
     # A deliberately separate, smaller model performs the always-on guard
     # classification. Keeping the guard off the reasoning model means a
     # compromised reasoning context cannot silently disable its own guard.
@@ -37,7 +39,7 @@ class Settings(BaseSettings):
     # The auditor runs on a different model family/config from the worker that
     # produced the work, so a systematic reasoning error is less likely to be
     # reproduced identically by its own reviewer.
-    auditor_model: str = Field(default="gemini-3.6-flash")
+    auditor_model: str = Field(default="gemini-3.5-flash")
 
     # --- Firestore --------------------------------------------------------
     firestore_database: str = Field(default="(default)")

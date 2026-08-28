@@ -277,3 +277,28 @@ async def test_a_permanently_failing_phase_is_abandoned_not_retried_forever(clea
     assert "failed 3 times in a row" in final.escalation_reason
     # It gave up rather than retrying indefinitely.
     assert failures == 2
+
+
+@pytest.mark.asyncio
+async def test_transient_faults_do_not_exhaust_the_failure_budget(clean_store):
+    """Quota exhaustion says 'not now'; a schema error says 'not ever'.
+    Spending the same budget on both makes a busy afternoon look like a bug."""
+    orch = StubOrchestrator()
+    incident = await _open(orch)
+
+    async def rate_limited(orch_, incident_):
+        raise RuntimeError("429 RESOURCE_EXHAUSTED. Resource exhausted, please try again later")
+
+    orch.on_phase = {"triage": rate_limited}
+
+    for _ in range(6):
+        try:
+            await orch.advance(incident.incident_id)
+        except RuntimeError:
+            pass
+
+    final = await orch.get_incident(incident.incident_id)
+    # Still retryable after six transient faults, rather than abandoned.
+    assert final.state is not IncidentState.FAILED
+    raw = await clean_store.get("incidents", incident.incident_id)
+    assert not (raw.get("phase_failures") or {})

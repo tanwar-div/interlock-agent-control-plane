@@ -61,6 +61,21 @@ APP_NAME = "interlock"
 # than retried indefinitely.
 _MAX_PHASE_FAILURES = 3
 
+# Errors worth waiting out rather than giving up on. Quota exhaustion, upstream
+# unavailability and deadline overruns say "not now"; a schema violation or a
+# missing permission says "not ever". Spending the same three-strike budget on
+# both means a busy afternoon looks identical to a broken deployment.
+_RETRYABLE_MARKERS = (
+    "429", "RESOURCE_EXHAUSTED", "quota",
+    "503", "UNAVAILABLE", "504", "DEADLINE_EXCEEDED",
+    "InternalServerError", "500 INTERNAL",
+)
+
+
+def _is_retryable(exc: Exception) -> bool:
+    text = f"{type(exc).__name__}: {exc}"
+    return any(marker.lower() in text.lower() for marker in _RETRYABLE_MARKERS)
+
 
 def _parse(value: Any) -> dt.datetime:
     """Parse a stored ISO timestamp, treating anything unreadable as very old."""
@@ -405,6 +420,16 @@ class IncidentOrchestrator:
         a deterministic fault. Returns True when the incident has been given up
         on, in which case the caller must not re-raise.
         """
+        if _is_retryable(exc):
+            # Let Pub/Sub redeliver with its own backoff, and let the sweeper
+            # pick the incident up if delivery is exhausted. Nothing is durably
+            # lost: the phase has not been marked as having failed.
+            logger.warning(
+                "phase %s hit a transient fault (%s); leaving it for redelivery",
+                agent_key, str(exc)[:120],
+            )
+            return False
+
         raw = await self._store.get(
             self._settings.collection_incidents, incident.incident_id
         ) or {}
