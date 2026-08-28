@@ -165,3 +165,38 @@ async def test_an_uncatalogued_action_never_reaches_the_model(monkeypatch):
     assert result.unknown_action is True
     assert result.severity is Severity.CATASTROPHIC
     assert called is False
+
+
+@pytest.mark.asyncio
+async def test_the_same_action_is_assessed_once(monkeypatch):
+    """Sampling is not reproducible even at temperature 0, so one distinct
+    action must yield one decision rather than a fresh roll each time."""
+    from interlock.blastradius.model_scorer import _CACHE, ModelScorer
+
+    _CACHE.clear()
+    calls = {"n": 0}
+
+    def fake_client(self):
+        class _M:
+            def generate_content(self, **kw):
+                calls["n"] += 1
+                class R: text = '{"data_risk":1,"availability_risk":1,"privilege_risk":0,"scope":1}'
+                return R()
+        class _C: models = _M()
+        return _C()
+
+    monkeypatch.setattr(ModelScorer, "_get_client", fake_client)
+    scorer = ModelScorer()
+    proposal = _proposal("run.services.rollback", service="checkout-api", revision="v41")
+    spec = lookup("run.services.rollback")
+
+    first = await scorer.assess(proposal, spec)
+    second = await scorer.assess(proposal, spec)
+    assert calls["n"] == 1
+    assert first.as_dict() == second.as_dict()
+
+    # A different action is a different question.
+    other = _proposal("run.services.rollback", service="billing-api", revision="v9")
+    await scorer.assess(other, spec)
+    assert calls["n"] == 2
+    _CACHE.clear()

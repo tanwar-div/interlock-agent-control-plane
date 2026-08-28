@@ -32,12 +32,27 @@ from typing import Any
 
 from interlock.blastradius.catalog import ActionSpec
 from interlock.common.config import get_settings
-from interlock.common.models import ActionProposal
+from interlock.common.models import ActionProposal, canonical_json, sha256_hex
 
 logger = logging.getLogger(__name__)
 
 _TIMEOUT_SECONDS = 20.0
 _DIMENSIONS = ("data_risk", "availability_risk", "privilege_risk", "scope")
+
+# Assessments are cached by the exact action and arguments they describe.
+#
+# Sampling the same action twice does not always return the same verdict, even
+# at temperature 0: measured over six identical requests, a traffic rollback
+# scored NEGLIGIBLE four times and MODERATE twice. Left uncached, an agent
+# retrying the same action could be refused and then permitted, or permitted
+# and then refused, for no reason it could observe or a reviewer could explain.
+#
+# Caching does not make the model deterministic. It makes one decision per
+# distinct action, so an incident is at least self-consistent and an audit
+# record can be read without the reader wondering why the same call was scored
+# two different ways.
+_CACHE: dict[str, "ModelRiskAssessment"] = {}
+_CACHE_MAX = 512
 
 
 @dataclass
@@ -261,6 +276,22 @@ class ModelScorer:
         model = self._settings.scoring_model
         prompt = build_prompt(proposal, spec)
 
+        # Key on what was assessed, never on who asked or why.
+        key = sha256_hex(
+            canonical_json(
+                {
+                    "model": model,
+                    "action_type": proposal.action_type,
+                    "target": proposal.target,
+                    "parameters": proposal.parameters or {},
+                }
+            )
+        )
+        cached = _CACHE.get(key)
+        if cached is not None:
+            logger.debug("reusing cached assessment for %s", proposal.action_type)
+            return cached
+
         def _call() -> str:
             from google.genai import types
 
@@ -292,6 +323,11 @@ class ModelScorer:
         assessment = parse_assessment(raw, model)
         if assessment is None:
             logger.warning("model scoring returned unusable output for %s", proposal.action_type)
+            return None
+
+        if len(_CACHE) >= _CACHE_MAX:
+            _CACHE.clear()
+        _CACHE[key] = assessment
         return assessment
 
 
