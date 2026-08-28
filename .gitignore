@@ -9,3 +9,6 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# Reference material, not part of the project
+google_teaching.md
