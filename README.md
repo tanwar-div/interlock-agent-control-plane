@@ -68,6 +68,42 @@ A long-running agent is not a chatbot that runs for longer. It is dormant most o
 
 ---
 
+## A verified run
+
+Not a description of intended behaviour — the output of an actual incident on live Google Cloud infrastructure.
+
+A deliberately broken revision of `checkout-api` was deployed, failing roughly two thirds of requests. An alert was raised. No human touched anything after that point.
+
+```
+t+12s   TRIAGING        hypothesis formed
+t+24s   INVESTIGATING   reading real logs, metrics and revisions
+t+108s  PLANNING        7 findings recorded
+t+144s  PLANNING        1 action executed
+t+156s  VERIFYING       independent auditor observing live state
+t+216s  RESOLVED
+```
+
+The decision path for the one mutating action, taken verbatim from the signed ledger:
+
+```
+#85  PROPOSED   run.services.rollback on checkout-api
+#86  SCORED     NEGLIGIBLE (10.5)  reversibility=REVERSIBLE
+#87  POLICY     ALLOW :: blast radius is NEGLIGIBLE; safe to execute autonomously
+#88  EXECUTED   ok
+```
+
+| | Before | After |
+|---|---|---|
+| Traffic | `checkout-api-00003-kvs` (broken) | `checkout-api-00002-hzz` |
+| Requests succeeding | 8 of 24 | **24 of 24** |
+| Ledger | — | 160 signed entries, chain **valid** |
+
+The auditor confirmed the remediation at 0.95 confidence and still recorded a discrepancy:
+
+> No active traffic has been received by the checkout-api service in the last 90 minutes, meaning we cannot verify that checkout-api-00002-hzz is actively and successfully serving traffic under load, although it is healthy and configured to receive 100% of it.
+
+That is the auditor declining to treat an absence of errors as evidence of recovery — which is the behaviour it was built for, not a description of it.
+
 ## Architecture
 
 ![Architecture](docs/architecture.svg)
@@ -237,4 +273,5 @@ The only meaningful cost is Gemini 3.6 Flash, at roughly **$0.10–0.20 per full
 - The guard reduces prompt-injection risk; it does not eliminate it. That is why the deterministic scorer, the capability allowlist and the severity ceiling sit behind it — a successful injection still cannot reach an action the agent was never entitled to perform.
 - Human-in-the-loop is implemented as an out-of-band approval record rather than ADK's in-session `request_confirmation`. That is deliberate: an approval that lives in Firestore survives the death of the process that requested it, which an in-session confirmation does not. The cost is that it is less idiomatic ADK.
 - Memory is service-scoped and lexical. It is not a semantic index, and it will not generalise a lesson learned about one service to a similar one.
+- The guard model is strict enough to flag instructional text in tool output, which is correct: it cannot distinguish guidance the author embedded from guidance an attacker embedded. Tool results must therefore carry data only, and there is a test enforcing it.
 - Model Armor is called per inspection. Google provides 2M tokens per project per month at no cost, which comfortably covers this workload, but it is a real dependency and the system fails closed when it is unreachable.
