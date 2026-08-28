@@ -26,7 +26,14 @@ class StubOrchestrator(IncidentOrchestrator):
         self.phases_run.append(agent_key)
         hook = self.on_phase.get(agent_key)
         if hook is not None:
-            await hook(self, incident)
+            # Route hook failures through the production failure path so tests
+            # exercise the real behaviour rather than the stub's.
+            try:
+                await hook(self, incident)
+            except Exception as exc:
+                if await self.record_phase_failure(incident, agent_key, exc):
+                    return ""
+                raise
         return self.outputs.get(agent_key, "")
 
 
@@ -242,3 +249,31 @@ async def test_an_expired_lease_can_be_reclaimed(clean_store):
     await clean_store.put("incidents", incident.incident_id, raw)
 
     assert await orch._acquire_lease(incident.incident_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_permanently_failing_phase_is_abandoned_not_retried_forever(clean_store):
+    """Retrying suits a transient fault and wastes redeliveries on a deterministic one."""
+    orch = StubOrchestrator()
+    incident = await _open(orch)
+
+    async def boom(self, incident_arg):
+        raise RuntimeError("deterministic configuration fault")
+
+    orch.on_phase = {"triage": boom}
+
+    failures = 0
+    for _ in range(5):
+        try:
+            await orch.advance(incident.incident_id)
+        except RuntimeError:
+            failures += 1
+        current = await orch.get_incident(incident.incident_id)
+        if current.state.terminal:
+            break
+
+    final = await orch.get_incident(incident.incident_id)
+    assert final.state is IncidentState.FAILED
+    assert "failed 3 times in a row" in final.escalation_reason
+    # It gave up rather than retrying indefinitely.
+    assert failures == 2

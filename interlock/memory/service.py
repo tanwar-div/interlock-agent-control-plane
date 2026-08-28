@@ -28,6 +28,8 @@ import datetime as dt
 import logging
 from typing import Any
 
+from google.adk.memory import BaseMemoryService
+
 from interlock.common.config import get_settings
 from interlock.common.models import new_id, utcnow
 from interlock.common.store import DocumentStore, get_store
@@ -209,11 +211,13 @@ class IncidentMemory:
         return rows
 
 
-class InterlockMemoryService:
+class InterlockMemoryService(BaseMemoryService):
     """Adapter exposing `IncidentMemory` through ADK's memory interface.
 
     This lets agents reach recall through ADK's own `load_memory` tool, rather
-    than only through briefs the orchestrator assembles.
+    than only through briefs the orchestrator assembles. It must genuinely
+    subclass `BaseMemoryService`: ADK type-validates the service it is handed,
+    so a structurally compatible class is not sufficient.
     """
 
     def __init__(self, memory: IncidentMemory | None = None) -> None:

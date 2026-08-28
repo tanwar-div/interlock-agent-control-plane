@@ -57,6 +57,10 @@ logger = logging.getLogger(__name__)
 
 APP_NAME = "interlock"
 
+# Consecutive failures of one phase before the incident is abandoned rather
+# than retried indefinitely.
+_MAX_PHASE_FAILURES = 3
+
 
 def _parse(value: Any) -> dt.datetime:
     """Parse a stored ISO timestamp, treating anything unreadable as very old."""
@@ -364,6 +368,9 @@ class IncidentOrchestrator:
                 actor=card.spiffe_id,
                 payload={"phase": agent_key, "error": str(exc)[:900]},
             )
+
+            if await self.record_phase_failure(incident, agent_key, exc):
+                return ""
             raise
 
         # Read back terminal intent the tools may have written into state.
@@ -388,6 +395,38 @@ class IncidentOrchestrator:
                     },
                 )
         return "\n".join(chunks).strip()
+
+    async def record_phase_failure(
+        self, incident: Incident, agent_key: str, exc: Exception
+    ) -> bool:
+        """Count a phase failure; abandon the incident once they stop being news.
+
+        Retrying is the right response to a transient fault and the wrong one to
+        a deterministic fault. Returns True when the incident has been given up
+        on, in which case the caller must not re-raise.
+        """
+        raw = await self._store.get(
+            self._settings.collection_incidents, incident.incident_id
+        ) or {}
+        failures = dict(raw.get("phase_failures") or {})
+        failures[agent_key] = int(failures.get(agent_key, 0)) + 1
+        await self._store.patch(
+            self._settings.collection_incidents,
+            incident.incident_id,
+            {"phase_failures": failures},
+        )
+        if failures[agent_key] < _MAX_PHASE_FAILURES:
+            return False
+
+        incident.escalation_reason = (
+            f"The {agent_key} phase failed {failures[agent_key]} times in a row and was "
+            f"abandoned. Last error: {str(exc)[:400]}"
+        )
+        await self._transition(
+            incident, IncidentState.FAILED, f"{agent_key} phase failed repeatedly"
+        )
+        await self._close(incident)
+        return True
 
     # -- briefs ------------------------------------------------------------
 
@@ -471,6 +510,11 @@ class IncidentOrchestrator:
             brief=await self._brief(incident, phase),
             session_suffix=phase.value.lower(),
         )
+
+        # The phase may have abandoned the incident rather than raising.
+        refreshed = await self.get_incident(incident_id)
+        if refreshed is not None and refreshed.state.terminal:
+            return refreshed
 
         # Re-read: tools mutate the incident document underneath us.
         incident = await self.get_incident(incident_id) or incident
