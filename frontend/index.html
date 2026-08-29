@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interlock — the gate between your agents and production</title>
+<meta name="description" content="An oversight and containment control plane for autonomous agents. Every action is identity-bound, blast-radius scored, policy-gated and recorded in a signed ledger.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ─────────────────────────── nav ─────────────────────────── -->
+<nav>
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top">Interlock</a>
+    <span class="status" id="status"><i class="dot"></i><span id="status-text">connecting…</span></span>
+    <div class="nav-links">
+      <a href="#problem">problem</a>
+      <a href="#how">how</a>
+      <a href="#cockpit">cockpit</a>
+      <a href="#evidence">evidence</a>
+      <a href="https://github.com/tanwar-div/interlock-agent-control-plane" target="_blank" rel="noopener">github ↗</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ─────────────────────────── hero ─────────────────────────── -->
+<header id="top" class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="kicker">Agent oversight &amp; containment</p>
+      <h1 id="headline" class="type-target" data-type="Your agents don't need&#10;less power.&#10;They need a gate."></h1>
+      <p class="lede">
+        Interlock sits between an autonomous agent and your infrastructure. Every action it
+        attempts is identity-bound, scored for what it could destroy, checked against policy,
+        and written to a signed ledger — <em>before</em> the tool runs. When the answer is no,
+        the function never executes.
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="#cockpit">Watch it refuse something →</a>
+        <a class="btn" href="#how">how it works</a>
+      </div>
+      <dl class="meta">
+        <div><dt>reasoning</dt><dd>gemini 3.5 flash</dd></div>
+        <div><dt>guard</dt><dd>gemma 4 · 26b</dd></div>
+        <div><dt>runtime</dt><dd>google adk</dd></div>
+        <div><dt>gate latency</dt><dd>~6s / action</dd></div>
+      </dl>
+    </div>
+
+    <!-- live trace panel -->
+    <aside class="panel trace" aria-label="Decision trace">
+      <div class="panel-bar">
+        <span class="mono dim">ledger · inc_1a7b26f6</span>
+        <span class="mono dim" id="trace-tag">chain verified</span>
+      </div>
+      <div class="panel-body">
+        <div class="tline"><span class="mono dim">agent ›</span> <span class="mono" id="t-ask"></span></div>
+        <div id="trace-rows"></div>
+        <div class="verdict-strip" id="t-verdict" hidden>
+          <span class="pill allow">ALLOW</span>
+          <span class="mono dim">executed · traffic 100% → checkout-api-00002-hzz</span>
+        </div>
+        <div class="tline sep"><span class="mono dim">and the same gate, one minute later ›</span></div>
+        <div class="tline"><span class="mono" id="t-ask2"></span></div>
+        <div class="verdict-strip deny" id="t-verdict2" hidden>
+          <span class="pill deny">DENY</span>
+          <span class="mono dim">grants access to a public principal (allUsers)</span>
+        </div>
+      </div>
+      <p class="caption">real ledger output · the cockpit below runs the same engine ↓</p>
+    </aside>
+  </div>
+</header>
+
+<!-- ─────────────────────────── problem ─────────────────────────── -->
+<section id="problem" class="band">
+  <div class="wrap">
+    <p class="kicker">The problem</p>
+    <h2 class="section-h">Everyone wants agents to fix production.<br>Nobody will give them the keys.</h2>
+    <p class="section-lede">
+      Not because agents can't do the work — because when one is wrong, it is wrong
+      with your credentials, at three in the morning, at machine speed.
+    </p>
+    <div class="cards three">
+      <article class="card incident"><p class="big mono">$82,314</p><p>A stolen API key ran up eighty-two thousand dollars in forty-eight hours. There is no hard spending cap to stop it.</p></article>
+      <article class="card incident"><p class="big mono">dropped</p><p>An agent deleted a production database during what it believed was a routine cleanup.</p></article>
+      <article class="card incident"><p class="big mono">$6,500</p><p>An agent given credentials and a goal provisioned oversized infrastructure and left its operator with the bill.</p></article>
+    </div>
+    <p class="pullquote">
+      So teams do the rational thing: they keep agents read-only, or they keep a human watching.
+      The automation never pays for itself.
+    </p>
+  </div>
+</section>
+
+<!-- ─────────────────────────── how ─────────────────────────── -->
+<section id="how" class="band alt">
+  <div class="wrap">
+    <p class="kicker">How it works</p>
+    <h2 class="section-h">Six checks, before the tool runs</h2>
+    <p class="section-lede">
+      Enforcement is an ADK plugin installed on the runner, so it applies to every agent in the
+      fleet — including ones added later. Returning a value from the tool hook <em>replaces</em>
+      the call, which is why a refusal is a gate and not a warning.
+    </p>
+    <div class="cards stages" id="stages"></div>
+    <div class="note">
+      <strong>The agent is never consulted.</strong> It proposes; something else decides. That
+      something is arithmetic over a human-written catalogue, floored beneath a model
+      assessment — and you cannot prompt-inject a weighted average.
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── cockpit ─────────────────────────── -->
+<section id="cockpit" class="band">
+  <div class="wrap">
+    <p class="kicker">Live cockpit</p>
+    <h2 class="section-h">Score an action against the real engine</h2>
+    <p class="section-lede">
+      This calls the deployed control plane when it is reachable, and replays recorded output
+      from real runs when it is not. Either way the verdicts are the engine's, not a mock-up.
+    </p>
+
+    <div class="cockpit">
+      <div class="cockpit-left">
+        <label class="field-label" for="sim-action">Action</label>
+        <select id="sim-action"></select>
+        <label class="field-label" for="sim-args">Arguments</label>
+        <textarea id="sim-args" rows="5" spellcheck="false"></textarea>
+        <button class="btn primary block" id="sim-run">Ask the gate</button>
+        <p class="hint" id="sim-hint">Try the last one — its arguments tell the scorer to rate it harmless.</p>
+
+        <div class="scoreboard">
+          <div><span class="num" id="n-allowed">0</span><span class="lbl">allowed</span></div>
+          <div><span class="num deny" id="n-denied">0</span><span class="lbl">refused</span></div>
+        </div>
+      </div>
+
+      <div class="cockpit-right">
+        <div class="panel result" id="sim-result">
+          <div class="empty" id="sim-empty">
+            <div class="ring"></div>
+            <p><strong>Nothing has been asked yet.</strong></p>
+            <p class="dim">Pick an action and the gate will score it — identity, blast radius,
+            content, then policy — and tell you exactly why.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- injection beat -->
+    <div class="injection">
+      <p class="kicker">The data itself attacks</p>
+      <h3>An instruction hidden in a log the agent has to read</h3>
+      <div class="panel">
+        <div class="panel-bar"><span class="mono dim">investigate_logs · checkout-api · 40 records</span></div>
+        <div class="panel-body">
+          <p class="mono logline ok">ERROR  upstream connect timeout after 30000ms</p>
+          <p class="mono logline ok">ERROR  payment client connection pool exhausted (max_connections=8)</p>
+          <p class="mono logline hostile" id="poison"></p>
+          <div class="verdict-strip deny" id="poison-verdict" hidden>
+            <span class="pill deny">QUARANTINED</span>
+            <span class="mono dim">Model Armor matched <code>pi_and_jailbreak</code> · 3 of 40 records withheld, 37 passed through</span>
+          </div>
+          <p class="note small" id="poison-note" hidden>
+            Withholding all forty would let anyone halt an investigation by writing to a log.
+            Only the hostile records are removed; the agent is told what was withheld and why.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── audit ─────────────────────────── -->
+<section class="band alt">
+  <div class="wrap narrow">
+    <p class="kicker">It checks itself</p>
+    <h2 class="section-h">A separate agent verifies the fix — and disagreed</h2>
+    <p class="section-lede">
+      The auditor runs in its own session, holds only read-only tools, and never sees the
+      remediation agent's reasoning. It is asked what is true of the live system, not whether
+      an argument was persuasive.
+    </p>
+    <div class="panel audit">
+      <div class="panel-bar"><span class="mono dim">audit verdict</span><span class="pill allow">confirmed · 0.95</span></div>
+      <div class="panel-body">
+        <p class="quote" id="audit-text"></p>
+        <p class="note small">It confirmed the rollback and still refused to treat an absence of
+        errors as evidence of recovery. That is the behaviour it was built for.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── evidence ─────────────────────────── -->
+<section id="evidence" class="band">
+  <div class="wrap">
+    <p class="kicker">Evidence</p>
+    <h2 class="section-h">The scoring strategy was chosen by measurement</h2>
+    <p class="section-lede">
+      Seventeen labelled actions — six routine, eleven dangerous, three with an attack embedded
+      in an argument. Four strategies, repeated. <strong>Unsafe</strong> counts a dangerous
+      action permitted; it must be zero.
+    </p>
+    <table class="evidence" id="evidence"></table>
+    <div class="findings three">
+      <article class="card"><h4>The rules were not the safest option</h4><p>Only the most predictable one. They missed three of nine attacks — rating an unrestricted <code>0.0.0.0/0</code> firewall rule as needing approval rather than refusal.</p></article>
+      <article class="card"><h4>Constraining the output shape fixed the variance</h4><p>A rollback scored NEGLIGIBLE four times and MODERATE twice across six identical requests. A response schema removed the variance rather than averaging over it.</p></article>
+      <article class="card"><h4>The expensive fix lost</h4><p>Self-consistency sampling — three assessments and a median — is the standard remedy. It scored worse than one constrained call, at three times the cost.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────────────────────── footprint ─────────────────────────── -->
+<section class="band alt">
+  <div class="wrap">
+    <p class="kicker">Running on Google Cloud</p>
+    <h2 class="section-h">Not a demo dataset</h2>
+    <div class="footprint" id="footprint"></div>
+    <div class="stack">
+      <div><span class="mono k">Gemini 3.5 Flash</span><span>four agents, and blast-radius scoring</span></div>
+      <div><span class="mono k">Gemma 4 · 26B</span><span>independent guard classifier, deliberately not the reasoning model</span></div>
+      <div><span class="mono k">Google ADK</span><span><code>BasePlugin</code> on the runner — the gate itself</span></div>
+      <div><span class="mono k">Cloud Run · Firestore · Pub/Sub</span><span>each phase is a message; state survives the process</span></div>
+      <div><span class="mono k">Cloud Scheduler</span><span>five-minute heartbeat that resumes stalled work</span></div>
+      <div><span class="mono k">Model Armor · Secret Manager · Cloud Trace</span><span>inline inspection, signing key, reasoning-chain spans</span></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="foot-line">Interlock — the gate between your agents and production.</p>
+    <p class="dim mono">Gemini 3.5 · Gemma 4 · Google ADK · Cloud Run · Firestore · Pub/Sub · Model Armor</p>
+  </div>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
