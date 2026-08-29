@@ -16,6 +16,7 @@ import re
 from typing import Any
 
 from interlock.blastradius.catalog import ActionSpec, lookup
+from interlock.common.config import get_settings
 from interlock.common.models import ActionProposal, BlastRadius, Reversibility, Severity
 
 # Principals that expose a resource to the entire internet.
@@ -199,13 +200,48 @@ def score_proposal(
     # --- Cost -------------------------------------------------------------
     cost_ceiling = _project_cost(spec, params, factors)
 
-    # --- Composite --------------------------------------------------------
-    weighted = (
-        _WEIGHTS["data_risk"] * data_risk
-        + _WEIGHTS["availability_risk"] * availability_risk
-        + _WEIGHTS["privilege_risk"] * privilege_risk
-        + _WEIGHTS["scope"] * scope
+    return compose(
+        reversibility=reversibility,
+        dimensions={
+            "data_risk": data_risk,
+            "availability_risk": availability_risk,
+            "privilege_risk": privilege_risk,
+            "scope": scope,
+        },
+        cost_ceiling=cost_ceiling,
+        factors=factors,
+        budget_remaining_usd=budget_remaining_usd,
+        scored_by="deterministic",
     )
+
+
+def catalogue_floor(spec: ActionSpec) -> dict[str, int]:
+    """The human-set baseline for an action, before any argument is considered."""
+    return {
+        "data_risk": spec.data_risk,
+        "availability_risk": spec.availability_risk,
+        "privilege_risk": spec.privilege_risk,
+        "scope": spec.scope,
+    }
+
+
+def compose(
+    *,
+    reversibility: Reversibility,
+    dimensions: dict[str, int],
+    cost_ceiling: float,
+    factors: list[str],
+    budget_remaining_usd: float | None = None,
+    scored_by: str = "deterministic",
+    model_assessment: dict[str, Any] | None = None,
+) -> BlastRadius:
+    """Turn four dimensions plus a reversibility into a severity.
+
+    Shared by both scoring paths so that a model-derived score and a
+    heuristic-derived score are always combined the same way, and are therefore
+    directly comparable.
+    """
+    weighted = sum(_WEIGHTS[name] * dimensions[name] for name in _WEIGHTS)
     multiplier = _REVERSIBILITY_MULTIPLIER[reversibility]
     score = min(100.0, (weighted / 4.0) * 100.0 * multiplier)
     if multiplier > 1.0:
@@ -224,13 +260,119 @@ def score_proposal(
 
     return BlastRadius(
         reversibility=reversibility,
-        scope=scope,
-        data_risk=data_risk,
-        availability_risk=availability_risk,
-        privilege_risk=privilege_risk,
+        scope=dimensions["scope"],
+        data_risk=dimensions["data_risk"],
+        availability_risk=dimensions["availability_risk"],
+        privilege_risk=dimensions["privilege_risk"],
         cost_ceiling_usd=cost_ceiling,
         severity=severity,
         score=round(score, 2),
         factors=factors,
         unknown_action=False,
+        scored_by=scored_by,
+        model_assessment=model_assessment,
+    )
+
+
+async def score_proposal_with_model(
+    proposal: ActionProposal,
+    *,
+    budget_remaining_usd: float | None = None,
+) -> BlastRadius:
+    """Score an action, preferring a model assessment over the heuristics.
+
+    The model sees only the action type, its description, the target and the
+    literal arguments. It never sees the proposing agent's reasoning, and each
+    assessment is an independent request with no memory of any other.
+
+    Two invariants survive regardless of what the model returns:
+
+      * **The catalogue is a floor.** Each dimension is raised to at least the
+        human-set baseline for that action. The model can decide an operation is
+        more dangerous than the catalogue says; it cannot decide it is safer.
+      * **Reversibility is never asked.** Whether an action can be undone is
+        fixed by a human and is not a judgement a model is invited to make.
+
+    If the model is unavailable for any reason — rate limited, timed out, or
+    returning something unparseable — the deterministic scorer runs instead. A
+    missing model costs sophistication, never safety.
+    """
+    settings = get_settings()
+    spec = lookup(proposal.action_type)
+
+    # An uncatalogued action has no floor to clamp against and no description to
+    # assess. It fails closed without consulting anything.
+    if spec is None or not settings.model_scoring_enabled:
+        return score_proposal(proposal, budget_remaining_usd=budget_remaining_usd)
+
+    from interlock.blastradius.model_scorer import get_model_scorer
+
+    assessment = await get_model_scorer().assess(proposal, spec)
+    if assessment is None:
+        result = score_proposal(proposal, budget_remaining_usd=budget_remaining_usd)
+        result.factors.append(
+            "model assessment unavailable; scored by deterministic heuristics instead"
+        )
+        result.scored_by = "deterministic-fallback"
+        return result
+
+    # The heuristics are the floor, not merely the catalogue. Live testing
+    # showed the assessor under-scoring well-understood dangers — it scored a
+    # grant to allUsers as affecting two resources rather than the whole
+    # internet — while correctly catching risks no pattern could express, such
+    # as 1000 instances exhausting a downstream connection pool. Taking the
+    # larger of the two on every dimension keeps what each is good at: the
+    # model can add danger it alone perceives, and can subtract none.
+    deterministic = score_proposal(proposal, budget_remaining_usd=budget_remaining_usd)
+    floor = {
+        "data_risk": max(spec.data_risk, deterministic.data_risk),
+        "availability_risk": max(spec.availability_risk, deterministic.availability_risk),
+        "privilege_risk": max(spec.privilege_risk, deterministic.privilege_risk),
+        "scope": max(spec.scope, deterministic.scope),
+    }
+    proposed = {
+        "data_risk": assessment.data_risk,
+        "availability_risk": assessment.availability_risk,
+        "privilege_risk": assessment.privilege_risk,
+        "scope": assessment.scope,
+    }
+    dimensions = {name: max(floor[name], proposed[name]) for name in floor}
+    clamped = [name for name in floor if proposed[name] < floor[name]]
+
+    factors = [
+        f"assessed by {assessment.model} from the action and its arguments alone",
+    ]
+    # Reversibility can still be tightened by the heuristics, e.g. a force flag.
+    reversibility = deterministic.reversibility
+    if assessment.reason:
+        factors.append(f"assessor: {assessment.reason}")
+    for name in ("data_risk", "availability_risk", "privilege_risk", "scope"):
+        if proposed[name] > floor[name]:
+            factors.append(
+                f"{name} raised from the catalogue baseline of {floor[name]} to "
+                f"{proposed[name]} on the strength of the arguments"
+            )
+    if clamped:
+        factors.append(
+            "the assessor scored "
+            + ", ".join(f"{n} below the deterministic baseline" for n in clamped)
+            + "; the higher baseline was applied instead"
+        )
+
+    cost_factors: list[str] = []
+    cost_ceiling = _project_cost(spec, proposal.parameters or {}, cost_factors)
+    factors.extend(cost_factors)
+
+    return compose(
+        reversibility=reversibility,
+        dimensions=dimensions,
+        cost_ceiling=cost_ceiling,
+        factors=factors,
+        budget_remaining_usd=budget_remaining_usd,
+        scored_by="model+floor" if clamped else "model",
+        model_assessment={
+            **assessment.as_dict(),
+            "deterministic_score": deterministic.score,
+            "deterministic_severity": deterministic.severity.value,
+        },
     )

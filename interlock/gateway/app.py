@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from interlock.blastradius.catalog import ACTION_CATALOG
-from interlock.blastradius.scorer import score_proposal
+from interlock.blastradius.scorer import score_proposal_with_model
 from interlock.common import pubsub
 from interlock.common.config import get_settings
 from interlock.common.models import (
@@ -423,7 +423,9 @@ async def simulate(payload: SimulateIn) -> dict[str, Any]:
         target=payload.target or payload.parameters.get("service", "unspecified"),
         parameters=payload.parameters,
     )
-    radius = score_proposal(proposal, budget_remaining_usd=settings.incident_budget_usd)
+    radius = await score_proposal_with_model(
+        proposal, budget_remaining_usd=settings.incident_budget_usd
+    )
     decision = policy.evaluate(proposal=proposal, blast_radius=radius, card=card, incident=None)
     return {
         "proposal": proposal.model_dump(mode="json"),
