@@ -149,7 +149,12 @@ async def test_incident_resumes_in_a_new_process_after_a_crash(clean_store):
 
 @pytest.mark.asyncio
 async def test_denied_approval_escalates_and_stops(clean_store):
-    from interlock.common.models import ApprovalRequest, ActionProposal, PolicyDecision, Decision
+    from interlock.common.models import (
+        ActionProposal,
+        ApprovalRequest,
+        Decision,
+        PolicyDecision,
+    )
 
     orch = StubOrchestrator()
     incident = await _open(orch)

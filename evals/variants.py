@@ -7,7 +7,6 @@ property we are trying to measure.
 from __future__ import annotations
 
 import asyncio
-import json
 import statistics
 from typing import Any
 
@@ -15,7 +14,6 @@ from interlock.blastradius.catalog import lookup
 from interlock.blastradius.model_scorer import build_prompt, parse_assessment
 from interlock.blastradius.scorer import (
     _project_cost,
-    catalogue_floor,
     compose,
     score_proposal,
 )

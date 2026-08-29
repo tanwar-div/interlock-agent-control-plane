@@ -62,7 +62,7 @@ def read_logs(
     from google.cloud import logging as cloud_logging
 
     project = _project()
-    since = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=minutes)
+    since = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=minutes)
     parts = [
         'resource.type="cloud_run_revision"',
         f'resource.labels.service_name="{service}"',
@@ -83,7 +83,7 @@ def read_logs(
                 max_results=limit,
             )
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not read logs for '{service}': {exc}") from exc
 
     rendered: list[dict[str, Any]] = []
@@ -131,7 +131,7 @@ def read_metrics(
     }
     metric_type = metric_types.get(metric, metric_types["request_latencies"])
 
-    now = dt.datetime.now(dt.timezone.utc)
+    now = dt.datetime.now(dt.UTC)
     interval = monitoring_v3.TimeInterval(
         {
             "end_time": {"seconds": int(now.timestamp())},
@@ -155,7 +155,7 @@ def read_metrics(
                 }
             )
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not read metric '{metric}' for '{service}': {exc}") from exc
 
     summary: list[dict[str, Any]] = []
@@ -199,7 +199,7 @@ def describe_service(*, service: str) -> dict[str, Any]:
     try:
         client = run_v2.ServicesClient()
         svc = client.get_service(name=name)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not describe service '{service}': {exc}") from exc
 
     traffic = [
@@ -232,7 +232,7 @@ def list_revisions(*, service: str, limit: int = 10) -> dict[str, Any]:
     try:
         client = run_v2.RevisionsClient()
         revisions = list(client.list_revisions(parent=parent))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not list revisions for '{service}': {exc}") from exc
 
     revisions.sort(key=lambda r: r.create_time.timestamp() if r.create_time else 0, reverse=True)
@@ -323,14 +323,14 @@ def shift_traffic(*, service: str, revision: str, percent: int = 100) -> dict[st
 
         operation = client.update_service(service=svc)
         result = operation.result(timeout=300)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not shift traffic for '{service}': {exc}") from exc
 
     return {
         "service": service,
         "revision": revision,
         "percent": percent,
-        "applied_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "applied_at": dt.datetime.now(dt.UTC).isoformat(),
         "current_traffic": [
             {"revision": t.revision, "percent": t.percent} for t in (result.traffic_statuses or [])
         ],
@@ -358,7 +358,7 @@ def update_scaling(
             svc.template.scaling.max_instance_count = int(max_instances)
         operation = client.update_service(service=svc)
         result = operation.result(timeout=300)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not update scaling for '{service}': {exc}") from exc
 
     return {
@@ -386,7 +386,7 @@ def set_bucket_iam(*, bucket: str, member: str, role: str) -> dict[str, Any]:
         previous = [{"role": b["role"], "members": sorted(b["members"])} for b in policy.bindings]
         policy.bindings.append({"role": role, "members": {member}})
         bucket_obj.set_iam_policy(policy)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not set IAM policy on bucket '{bucket}': {exc}") from exc
 
     return {
@@ -428,7 +428,7 @@ def create_compute_instances(
             operation = client.insert(project=project, zone=zone, instance_resource=instance)
             operation.result(timeout=300)
             created.append(instance.name)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not create compute instances: {exc}") from exc
 
     return {
@@ -451,7 +451,7 @@ def create_sql_backup(*, instance: str) -> dict[str, Any]:
             project=project, instance=instance, body={"description": "interlock pre-remediation backup"}
         )
         response = request.execute()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise CloudError(f"could not create backup for '{instance}': {exc}") from exc
     return {"instance": instance, "operation": response.get("name", ""), "status": response.get("status", "")}
 

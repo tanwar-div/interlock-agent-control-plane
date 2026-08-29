@@ -13,15 +13,14 @@ module and not by anything the model emits.
 """
 from __future__ import annotations
 
-import asyncio
 import datetime as dt
 import json
 import logging
 import uuid
 from typing import Any
 
-from google.adk.apps.app import App
 from google.adk.apps._configs import EventsCompactionConfig, ResumabilityConfig
+from google.adk.apps.app import App
 from google.adk.runners import Runner
 from google.adk.sessions import BaseSessionService, InMemorySessionService
 from google.genai import types
@@ -80,12 +79,12 @@ def _is_retryable(exc: Exception) -> bool:
 def _parse(value: Any) -> dt.datetime:
     """Parse a stored ISO timestamp, treating anything unreadable as very old."""
     if isinstance(value, dt.datetime):
-        return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+        return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
     try:
         parsed = dt.datetime.fromisoformat(str(value))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.UTC)
     except (TypeError, ValueError):
-        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+        return dt.datetime.min.replace(tzinfo=dt.UTC)
 
 # Which agent runs in which state, and where the machine goes next.
 _PHASE_AGENT = {
@@ -139,7 +138,7 @@ class IncidentOrchestrator:
 
                 logger.info("using DatabaseSessionService for ADK sessions")
                 return DatabaseSessionService(db_url=url)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("could not open session database (%s); using in-memory sessions", exc)
         # Phase-level durability lives in Firestore, so in-memory ADK sessions
         # are sufficient: a resumed run rebuilds its session from the
@@ -375,7 +374,7 @@ class IncidentOrchestrator:
                         text = getattr(part, "text", None)
                         if text:
                             chunks.append(text)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("agent %s failed", agent_key)
             await self._ledger.append(
                 incident_id=incident.incident_id,
@@ -789,7 +788,7 @@ class IncidentOrchestrator:
             try:
                 await self.resume(incident_id)
                 resumed.append(incident_id)
-            except Exception as exc:  # noqa: BLE001 - one bad incident must not stop the sweep
+            except Exception as exc:
                 logger.exception("could not resume %s: %s", incident_id, exc)
 
         result = {

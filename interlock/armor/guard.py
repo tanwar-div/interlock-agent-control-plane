@@ -67,7 +67,7 @@ def _access_token() -> str | None:
         )
         credentials.refresh(google.auth.transport.requests.Request())
         return credentials.token
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.debug("could not obtain Google credentials: %s", exc)
         return None
 
@@ -132,7 +132,7 @@ class Guard:
                 return False, [], ["Model Armor template not found"], True
             response.raise_for_status()
             payload = response.json()
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Model Armor call failed: %s", exc)
             return False, [], [f"Model Armor error: {exc}"], True
 
@@ -178,7 +178,7 @@ class Guard:
                     )
                 else:
                     self._genai_client = genai.Client()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("genai client unavailable: %s", exc)
                 return None
         return self._genai_client
@@ -201,7 +201,7 @@ class Guard:
 
         try:
             verdict = await asyncio.wait_for(asyncio.to_thread(_call), timeout=_GEMMA_TIMEOUT)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("Gemma guard call failed: %s", exc)
             return False, [f"guard model error: {exc}"], True
 

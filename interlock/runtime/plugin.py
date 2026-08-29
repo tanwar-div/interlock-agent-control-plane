@@ -85,7 +85,7 @@ class InterlockPlugin(BasePlugin):
     def _state_get(state: Any, key: str, default: Any = None) -> Any:
         try:
             value = state.get(key, default)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return default
         return value if value is not None else default
 
@@ -291,7 +291,7 @@ class InterlockPlugin(BasePlugin):
             # Stash for after_tool_callback.
             try:
                 state["last_proposal_id"] = proposal.proposal_id
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
             return None  # tool executes
 
@@ -558,7 +558,7 @@ class InterlockPlugin(BasePlugin):
             content = getattr(llm_response, "content", None)
             if content is not None and getattr(content, "parts", None):
                 text = " ".join(getattr(p, "text", "") or "" for p in content.parts)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
 
         if not text.strip():

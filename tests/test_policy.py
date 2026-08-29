@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from interlock.blastradius.scorer import score_proposal
 from interlock.common.models import (
-    ActionProposal, AgentCard, Alert, Decision, GuardCategory, GuardVerdict,
-    Incident, Severity,
+    ActionProposal,
+    AgentCard,
+    Alert,
+    Decision,
+    GuardCategory,
+    GuardVerdict,
+    Incident,
+    Severity,
 )
 from interlock.policy.engine import PolicyEngine
 

@@ -53,7 +53,7 @@ async def investigate_logs(
     """
     try:
         return {"ok": True, **cloud.read_logs(service=service, minutes=minutes, severity=severity)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -77,7 +77,7 @@ async def investigate_metrics(
     """
     try:
         return {"ok": True, **cloud.read_metrics(service=service, metric=metric, minutes=minutes)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -94,7 +94,7 @@ async def inspect_service(service: str, tool_context: ToolContext | None = None)
     """
     try:
         return {"ok": True, **cloud.describe_service(service=service)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -114,7 +114,7 @@ async def inspect_revisions(
     """
     try:
         return {"ok": True, **cloud.list_revisions(service=service, limit=limit)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -143,7 +143,7 @@ async def rollback_to_revision(
         if tool_context is not None:
             tool_context.state["last_undo_token"] = result.get("undo_token")
         return {"ok": True, **result}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -168,7 +168,7 @@ async def shift_service_traffic(
         if tool_context is not None:
             tool_context.state["last_undo_token"] = result.get("undo_token")
         return {"ok": True, **result}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -198,7 +198,7 @@ async def adjust_service_scaling(
         if tool_context is not None:
             tool_context.state["last_undo_token"] = result.get("undo_token")
         return {"ok": True, **result}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -217,7 +217,7 @@ async def take_database_backup(
     """
     try:
         return {"ok": True, **cloud.create_sql_backup(instance=instance)}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -250,7 +250,7 @@ async def grant_bucket_access(
         if tool_context is not None:
             tool_context.state["last_undo_token"] = result.get("undo_token")
         return {"ok": True, **result}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 
@@ -274,7 +274,7 @@ async def provision_compute_capacity(
             machine_type=machine_type, count=int(count), zone=zone
         )
         return {"ok": True, **result}
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return _fail(exc)
 
 

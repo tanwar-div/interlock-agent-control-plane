@@ -1,0 +1,44 @@
+name: tests
+
+on:
+  push:
+    branches: [main, with_model_control]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -e ".[dev]"
+          uv pip install --python .venv/bin/python "google-adk[db]"
+
+      # The suite runs with no cloud project and no model access: the governance
+      # path is exercised against an in-memory store, and every network detector
+      # degrades to its offline behaviour. A test that needs credentials is a
+      # test nobody runs.
+      - name: Run tests
+        env:
+          INTERLOCK_PROJECT_ID: ""
+          INTERLOCK_MODEL_ARMOR_ENABLED: "false"
+        run: .venv/bin/python -m pytest tests/ -q
+
+      - name: Lint
+        run: .venv/bin/python -m ruff check interlock tests evals

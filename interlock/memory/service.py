@@ -58,12 +58,12 @@ _KIND_TTL_DAYS = {
 
 def _aware(value: Any) -> dt.datetime:
     if isinstance(value, dt.datetime):
-        return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+        return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
     try:
         parsed = dt.datetime.fromisoformat(str(value))
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=dt.UTC)
     except (TypeError, ValueError):
-        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+        return dt.datetime.min.replace(tzinfo=dt.UTC)
 
 
 class IncidentMemory:
@@ -182,7 +182,7 @@ class IncidentMemory:
         now = utcnow()
 
         def _is_live(row: dict[str, Any]) -> bool:
-            days = _KIND_TTL_DAYS.get(row.get("kind", ""), None)
+            days = _KIND_TTL_DAYS.get(row.get("kind", ""))
             if days is None:
                 days = self._settings.memory_ttl_days
             return _aware(row.get("last_seen")) >= now - dt.timedelta(days=days)

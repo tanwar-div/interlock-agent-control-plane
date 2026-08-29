@@ -31,7 +31,7 @@ def _client() -> Any | None:
 
         _publisher = pubsub_v1.PublisherClient()
         return _publisher
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Pub/Sub publisher unavailable: %s", exc)
         return None
 
@@ -49,7 +49,7 @@ def publish(topic: str, payload: dict[str, Any], **attributes: str) -> str | Non
             **{k: str(v) for k, v in attributes.items()},
         )
         return future.result(timeout=30)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("failed to publish to %s: %s", topic, exc)
         return None
 
@@ -72,7 +72,7 @@ def decode_push(body: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
         decoded = base64.b64decode(data).decode("utf-8")
         payload = json.loads(decoded)
         return (payload if isinstance(payload, dict) else {"value": payload}), attributes
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.error("could not decode Pub/Sub message: %s", exc)
         return {}, attributes
 

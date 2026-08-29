@@ -14,7 +14,8 @@ import asyncio
 import copy
 import logging
 import threading
-from typing import Any, Callable, Iterable, Protocol
+from collections.abc import Callable, Iterable
+from typing import Any, Protocol
 
 from interlock.common.config import get_settings
 
@@ -250,7 +251,7 @@ def get_store() -> DocumentStore:
             try:
                 _store = FirestoreStore(settings.project_id, settings.firestore_database)
                 logger.info("using Firestore store (project=%s)", settings.project_id)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("Firestore unavailable (%s); falling back to in-memory store", exc)
                 _store = MemoryStore()
         else:

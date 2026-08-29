@@ -91,7 +91,7 @@ def _secret_manager_pem(secret_id: str) -> str | None:
         client = secretmanager.SecretManagerServiceClient()
         name = f"projects/{settings.project_id}/secrets/{secret_id}/versions/latest"
         return client.access_secret_version(request={"name": name}).payload.data.decode()
-    except Exception as exc:  # noqa: BLE001 - fall back rather than fail startup
+    except Exception as exc:
         logger.warning("could not read signing key from Secret Manager (%s); using local key", exc)
         return None
 
@@ -131,3 +131,47 @@ def control_plane_key(secret_id: str | None = None) -> tuple[str, str]:
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     ).decode()
     return private_pem, public_pem
+
+
+def derive_agent_key(spiffe_id: str) -> tuple[str, str]:
+    """Derive an agent's keypair deterministically from the control-plane key.
+
+    Agent keys were previously generated once and written to local disk. On
+    Cloud Run that disk is per-instance and discarded, so every new instance
+    minted a fresh keypair and overwrote the agent's registered card. The chain
+    still verified, because ledger entries are signed by the control-plane key,
+    but a proposal signature recorded by one instance could not afterwards be
+    checked against a card rewritten by another. Non-repudiation that lasts
+    only as long as a container is not non-repudiation.
+
+    Deriving the key removes the problem rather than relocating it. HKDF over
+    the control-plane secret and the agent's SPIFFE id yields the same private
+    key on every instance, for as long as that secret exists, with nothing to
+    store, synchronise, or lose. Rotating the control-plane secret rotates every
+    agent identity with it, which is the behaviour you want.
+    """
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    private_pem, _ = control_plane_key()
+    root = load_private_key(private_pem).private_bytes_raw()
+
+    seed = HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b"interlock/agent-identity/v1",
+        info=spiffe_id.encode("utf-8"),
+    ).derive(root)
+
+    private = Ed25519PrivateKey.from_private_bytes(seed)
+    return (
+        private.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode(),
+        private.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode(),
+    )

@@ -186,7 +186,14 @@ export REGION=us-central1
 
 `00-setup.sh` is idempotent and safe to re-run. It grants the control plane a **deliberately narrow** role set — no `owner`, no `editor`, and no capability to delete databases. Dangerous capability is absent rather than merely policed.
 
-The deploy prints your console URL. Open it.
+**The control plane is not publicly reachable.** Pub/Sub and Cloud Scheduler call it with an OIDC token minted for the control-plane service account; a human reaches the console through an authenticated proxy:
+
+```bash
+gcloud run services proxy interlock --region us-central1 --port 8080
+# then open http://localhost:8080
+```
+
+A service that can spend money on model calls should not accept anonymous requests.
 
 ### Run locally
 
@@ -284,4 +291,5 @@ The only meaningful cost is Gemini 3.6 Flash, at roughly **$0.10–0.20 per full
 - Human-in-the-loop is implemented as an out-of-band approval record rather than ADK's in-session `request_confirmation`. That is deliberate: an approval that lives in Firestore survives the death of the process that requested it, which an in-session confirmation does not. The cost is that it is less idiomatic ADK.
 - Memory is service-scoped and lexical. It is not a semantic index, and it will not generalise a lesson learned about one service to a similar one.
 - The guard model is strict enough to flag instructional text in tool output, which is correct: it cannot distinguish guidance the author embedded from guidance an attacker embedded. Tool results must therefore carry data only, and there is a test enforcing it.
+- Agent identities are derived from the control-plane secret rather than generated and stored, so an identity survives the container that created it. Rotating that secret rotates every agent identity with it, which is intended but worth knowing.
 - Model Armor is called per inspection. Google provides 2M tokens per project per month at no cost, which comfortably covers this workload, but it is a real dependency and the system fails closed when it is unreachable.

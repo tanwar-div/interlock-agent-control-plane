@@ -6,7 +6,12 @@ import datetime as dt
 import pytest
 
 from interlock.common.models import (
-    ActionProposal, ApprovalRequest, Decision, IncidentState, PolicyDecision, utcnow,
+    ActionProposal,
+    ApprovalRequest,
+    Decision,
+    IncidentState,
+    PolicyDecision,
+    utcnow,
 )
 from tests.test_orchestrator import StubOrchestrator, _open
 

@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 def utcnow() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 def new_id(prefix: str) -> str:
@@ -64,16 +64,16 @@ class Severity(str, enum.Enum):
     def rank(self) -> int:
         return list(Severity).index(self)
 
-    def __ge__(self, other: "Severity") -> bool:  # type: ignore[override]
+    def __ge__(self, other: Severity) -> bool:  # type: ignore[override]
         return self.rank >= other.rank
 
-    def __gt__(self, other: "Severity") -> bool:  # type: ignore[override]
+    def __gt__(self, other: Severity) -> bool:  # type: ignore[override]
         return self.rank > other.rank
 
-    def __le__(self, other: "Severity") -> bool:  # type: ignore[override]
+    def __le__(self, other: Severity) -> bool:  # type: ignore[override]
         return self.rank <= other.rank
 
-    def __lt__(self, other: "Severity") -> bool:  # type: ignore[override]
+    def __lt__(self, other: Severity) -> bool:  # type: ignore[override]
         return self.rank < other.rank
 
 

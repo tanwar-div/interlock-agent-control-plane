@@ -52,7 +52,9 @@ def configure_telemetry(service_name: str) -> None:
             )
             logger.info("exporting traces to Cloud Trace (project=%s)", settings.project_id)
         elif os.environ.get("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"):
-            from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter,
+            )
 
             provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
             logger.info("exporting traces via OTLP")
@@ -61,7 +63,7 @@ def configure_telemetry(service_name: str) -> None:
 
         trace.set_tracer_provider(provider)
         _configured = True
-    except Exception as exc:  # noqa: BLE001 - telemetry must never break the service
+    except Exception as exc:
         logger.warning("could not configure telemetry: %s", exc)
 
 
@@ -76,7 +78,7 @@ def instrument_fastapi(app: Any) -> None:
         from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
         FastAPIInstrumentor.instrument_app(app, excluded_urls="healthz,readyz")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("could not instrument FastAPI: %s", exc)
 
 

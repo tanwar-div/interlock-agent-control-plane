@@ -11,7 +11,7 @@ os.environ.setdefault("INTERLOCK_PROJECT_ID", "")
 os.environ.setdefault("INTERLOCK_MODEL_ARMOR_ENABLED", "false")
 os.environ.setdefault("INTERLOCK_KEY_DIR", ".interlock-test-keys")
 
-from interlock.common.store import MemoryStore, set_store  # noqa: E402
+from interlock.common.store import MemoryStore, set_store
 
 
 @pytest.fixture(autouse=True)

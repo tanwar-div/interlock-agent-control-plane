@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-from pathlib import Path
-from typing import Any
 
 from interlock.common.config import get_settings
 from interlock.common.models import (
@@ -32,14 +30,12 @@ from interlock.common.models import (
 from interlock.common.store import DocumentStore, get_store
 from interlock.identity.keys import (
     control_plane_key,
-    generate_keypair,
+    derive_agent_key,
     sign,
     verify,
 )
 
 logger = logging.getLogger(__name__)
-
-_AGENT_KEY_DIR = Path(".interlock-keys/agents")
 
 
 class IdentityError(RuntimeError):
@@ -76,24 +72,23 @@ class AgentRegistry:
         spiffe = self.spiffe_id(namespace, name)
         agent_id = spiffe.replace("://", "_").replace("/", "_")
 
-        existing = await self._store.get(self._collection, agent_id)
-        key_path = _AGENT_KEY_DIR / f"{agent_id}.pem"
+        # Derived, not generated: every instance reaches the same keypair for a
+        # given agent, so an identity survives the container that first used it
+        # and a signature recorded today can still be checked tomorrow.
+        private_pem, public_pem = derive_agent_key(spiffe)
 
-        if existing and key_path.exists():
+        existing = await self._store.get(self._collection, agent_id)
+        if existing:
             card = AgentCard.model_validate(existing)
             # Capabilities are refreshed from code so the card cannot drift
             # away from what the deployment actually intends to grant.
+            card.public_key_pem = public_pem
             card.allowed_tools = sorted(allowed_tools)
             card.max_severity = max_severity
             card.revoked = False
             card = self._sign_card(card)
             await self._store.put(self._collection, agent_id, card.model_dump(mode="json"))
-            return card, key_path.read_text()
-
-        private_pem, public_pem = generate_keypair()
-        _AGENT_KEY_DIR.mkdir(parents=True, exist_ok=True)
-        key_path.write_text(private_pem)
-        key_path.chmod(0o600)
+            return card, private_pem
 
         card = AgentCard(
             agent_id=agent_id,
@@ -187,7 +182,7 @@ class AgentRegistry:
 
 
 def _aware(value: dt.datetime) -> dt.datetime:
-    return value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=dt.UTC)
 
 
 def sign_proposal(proposal: ActionProposal, private_pem: str) -> ActionProposal:

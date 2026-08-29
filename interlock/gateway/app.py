@@ -62,6 +62,10 @@ policy = PolicyEngine()
 
 CONSOLE_DIR = Path(__file__).resolve().parent.parent / "console" / "static"
 
+# Strong references to in-flight background work. Without these the event loop
+# holds only a weak reference and may collect a running task.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
 
 # ---------------------------------------------------------------------------
 # Request models
@@ -107,14 +111,18 @@ async def _dispatch_phase(incident_id: str, background: BackgroundTasks | None) 
     if background is not None:
         background.add_task(_advance_until_blocked, incident_id)
     else:
-        asyncio.create_task(_advance_until_blocked(incident_id))
+        # Hold a reference: a task with no live reference can be collected
+        # mid-flight, which would silently abandon an incident.
+        task = asyncio.create_task(_advance_until_blocked(incident_id))
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
     return "background"
 
 
 async def _advance_until_blocked(incident_id: str) -> None:
     try:
         await orchestrator.run_to_completion(incident_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.exception("orchestration failed for %s", incident_id)
 
 
@@ -123,6 +131,11 @@ async def _advance_until_blocked(incident_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+# Cloud Run's frontend intercepts /healthz and answers 404 with an HTML page
+# before the request reaches the container, even though FastAPI registers the
+# route. /health is served as the reachable alias; /readyz is the one to point
+# a probe at, since it also proves the fleet registered.
+@app.get("/health")
 @app.get("/healthz")
 async def healthz() -> dict[str, Any]:
     return {"status": "ok", "service": "interlock-gateway", "version": "1.0.0"}
@@ -286,7 +299,7 @@ async def sweep() -> dict[str, Any]:
 async def pubsub_sweep(request: Request) -> Response:
     try:
         await request.json()
-    except Exception:  # noqa: BLE001 - Scheduler may send an empty body
+    except Exception:
         pass
     await orchestrator.sweep()
     return Response(status_code=204)
@@ -350,7 +363,7 @@ async def decide_approval(
             resolved_by=payload.resolved_by,
             justification=payload.justification,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if payload.approved and not incident.state.terminal:

@@ -13,8 +13,8 @@ outcome across all matching rules is returned.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from interlock.common.config import get_settings
 from interlock.common.models import (
@@ -156,7 +156,7 @@ def _rule_privilege_change(ctx: PolicyContext) -> tuple[Decision, str] | None:
 def _rule_severity_gate(ctx: PolicyContext) -> tuple[Decision, str] | None:
     severity = ctx.blast_radius.severity
     if severity <= Severity.LOW:
-        return Decision.ALLOW, f"blast radius is {severity.value}; safe to execute autonomously"  # noqa: E501
+        return Decision.ALLOW, f"blast radius is {severity.value}; safe to execute autonomously"
     if severity is Severity.MODERATE:
         return Decision.REQUIRE_APPROVAL, (
             f"blast radius is {severity.value}; a human confirms before execution"
@@ -232,7 +232,7 @@ class PolicyEngine:
         for rule in self._rules:
             try:
                 result = rule.evaluate(ctx)
-            except Exception as exc:  # noqa: BLE001 - a broken rule must not open the gate
+            except Exception as exc:
                 logger.exception("policy rule %s raised", rule.name)
                 matched.append(rule.name)
                 reasons.append(f"rule '{rule.name}' failed to evaluate ({exc}); failing closed")

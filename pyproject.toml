@@ -42,3 +42,30 @@ packages = ["interlock"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "PERF", "RUF"]
+ignore = [
+  # A governance plane fails closed, which means catching everything a
+  # dependency might raise and converting it into a refusal. Narrowing these
+  # would let an unanticipated exception escape and skip the gate.
+  "BLE001",
+  # Deliberate silent fallbacks on optional telemetry and state writes, where
+  # failing loudly would take down the request path that carries the decision.
+  "S110",
+  "E501",   # long lines are almost all prose in explanatory comments
+  # Our enums subclass (str, Enum) deliberately: pydantic serialisation and the
+  # Firestore round-trip depend on that behaviour, and switching to StrEnum is a
+  # behavioural change we have no reason to take.
+  "UP042",
+  "PERF401", "PERF102", "SIM105", "SIM102", "E701", "UP031", "RUF046", "RUF059",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert on behaviour, not style.
+"tests/*" = ["S101", "PERF", "SIM"]
+"evals/*" = ["E402"]

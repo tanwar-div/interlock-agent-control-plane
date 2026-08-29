@@ -51,7 +51,7 @@ _DIMENSIONS = ("data_risk", "availability_risk", "privilege_risk", "scope")
 # distinct action, so an incident is at least self-consistent and an audit
 # record can be read without the reader wondering why the same call was scored
 # two different ways.
-_CACHE: dict[str, "ModelRiskAssessment"] = {}
+_CACHE: dict[str, ModelRiskAssessment] = {}
 _CACHE_MAX = 512
 
 # Constrained decoding, and the single largest accuracy win measured.
@@ -284,7 +284,7 @@ class ModelScorer:
                     )
                 else:
                     self._client = genai.Client()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug("scoring client unavailable: %s", exc)
                 return None
         return self._client
@@ -343,10 +343,10 @@ class ModelScorer:
             raw = await asyncio.wait_for(
                 asyncio.to_thread(_call), timeout=_TIMEOUT_SECONDS
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("model scoring timed out for %s", proposal.action_type)
             return None
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             # 429s are expected under load; treat every failure identically.
             logger.warning("model scoring unavailable for %s: %s", proposal.action_type, str(exc)[:160])
             return None

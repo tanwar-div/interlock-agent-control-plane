@@ -54,7 +54,7 @@ async def _check_traffic_shift(proposal: ActionProposal) -> FreshnessVerdict:
         current, revs = await asyncio.gather(_service_state(service), _revisions(service))
     except cloud.NotConfiguredError:
         return FreshnessVerdict(stale=False, degraded=True, detail="no cloud project configured")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("freshness check failed for %s: %s", service, exc)
         return FreshnessVerdict(stale=False, degraded=True, detail=str(exc)[:300])
 
@@ -109,7 +109,7 @@ async def _check_scaling(proposal: ActionProposal) -> FreshnessVerdict:
         current = await _service_state(service)
     except cloud.NotConfiguredError:
         return FreshnessVerdict(stale=False, degraded=True)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return FreshnessVerdict(stale=False, degraded=True, detail=str(exc)[:300])
 
     wanted_max = proposal.parameters.get("max_instances")

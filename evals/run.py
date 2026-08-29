@@ -12,10 +12,9 @@ import argparse
 import asyncio
 import collections
 import statistics
-import sys
 import warnings
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Awaitable, Callable
 
 warnings.filterwarnings("ignore")
 

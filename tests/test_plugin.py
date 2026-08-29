@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from interlock.armor.guard import Guard
-from interlock.common.models import Severity
+from interlock.common.models import ActionProposal, Severity
 from interlock.identity.registry import AgentRegistry
 from interlock.ledger.ledger import Ledger
 from interlock.runtime.governed import action_types_for
@@ -261,3 +261,57 @@ async def test_concurrent_appends_produce_an_unbroken_chain(clean_store):
     assert [e.sequence for e in entries] == list(range(25))
     report = await ledger.verify_chain("inc_test")
     assert report.valid, report.problems
+
+
+@pytest.mark.asyncio
+async def test_agent_identity_survives_the_instance_that_created_it(clean_store):
+    """Keys are derived, not generated and stored on a container's local disk.
+
+    Previously each instance minted a fresh keypair and overwrote the agent's
+    card, so a signature recorded by one instance could not afterwards be
+    verified against a card rewritten by another. Non-repudiation that lasts
+    only as long as a container is not non-repudiation.
+    """
+    from interlock.common.models import canonical_json
+    from interlock.identity.keys import verify
+    from interlock.identity.registry import sign_proposal
+
+    registry = AgentRegistry()
+    card_a, key_a = await registry.register(
+        name="remediation", namespace="sre", display_name="Remediation Agent",
+        allowed_tools=["run.services.rollback"], max_severity=Severity.HIGH,
+    )
+    proposal = sign_proposal(
+        ActionProposal(
+            incident_id="inc", actor=card_a.spiffe_id,
+            action_type="run.services.rollback", target="checkout-api",
+        ),
+        key_a,
+    )
+
+    # A second instance registers the same agent from scratch.
+    card_b, key_b = await registry.register(
+        name="remediation", namespace="sre", display_name="Remediation Agent",
+        allowed_tools=["run.services.rollback"], max_severity=Severity.HIGH,
+    )
+    assert key_b == key_a
+    assert card_b.public_key_pem == card_a.public_key_pem
+
+    # The earlier signature still verifies against the later card.
+    assert verify(
+        card_b.public_key_pem, canonical_json(proposal.signing_payload()), proposal.signature
+    )
+
+
+@pytest.mark.asyncio
+async def test_each_agent_gets_a_distinct_identity(clean_store):
+    registry = AgentRegistry()
+    remediation, _ = await registry.register(
+        name="remediation", namespace="sre", display_name="R",
+        allowed_tools=[], max_severity=Severity.LOW,
+    )
+    investigator, _ = await registry.register(
+        name="investigator", namespace="sre", display_name="I",
+        allowed_tools=[], max_severity=Severity.LOW,
+    )
+    assert remediation.public_key_pem != investigator.public_key_pem

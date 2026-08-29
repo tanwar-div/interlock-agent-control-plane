@@ -150,7 +150,7 @@ class Ledger:
                 try:
                     record = await self._store.transact(_txn)
                     break
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     # Contention is expected and recoverable; anything else is not.
                     if "Aborted" not in type(exc).__name__ and "contention" not in str(exc):
                         raise
