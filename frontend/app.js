@@ -1,4 +1,5 @@
-import { LEDGER_ALLOW, DENIALS, ADVERSARIAL, POISONED_LOG, AUDIT, EVIDENCE, STAGES, FOOTPRINT } from "./data.js";
+import { DENIALS, ADVERSARIAL, POISONED_LOG, AUDIT, EVIDENCE, STAGES, FOOTPRINT } from "./data.js";
+import { CHAT, RUN, CHAT_AFTER } from "./scene.js";
 
 /* The control plane is not public. When you are running
  *   gcloud run services proxy interlock --region us-central1 --port 8080
@@ -67,22 +68,119 @@ function renderFootprint() {
     `<div><span class="v">${f.v}</span><span class="k">${esc(f.k)}</span></div>`).join("");
 }
 
-/* ── hero trace ──────────────────────────────────────────────────────── */
-async function playTrace() {
-  await type($("#t-ask"), "rollback checkout-api to the last healthy revision", { speed: 22 });
-  const rows = $("#trace-rows");
-  for (const r of LEDGER_ALLOW) {
-    const el = document.createElement("div");
-    el.className = "trow";
-    el.innerHTML = `<span class="s">#${r.seq}</span><span class="k ${r.kind}">${r.kind}</span><span class="b">${esc(r.body)}</span>`;
-    rows.appendChild(el);
-    await sleep(REDUCED ? 0 : 380);
+/* ── the scene ───────────────────────────────────────────────────────────
+ * A conversation, then an agent run that reaches too far. The pacing is the
+ * point: messages arrive at reading speed, the agent's steps at working speed,
+ * and the refusal lands instantly. */
+function bubble(m) {
+  const el = document.createElement("div");
+  el.className = `msg ${m.who}`;
+  el.innerHTML = `<span class="who">${esc(m.name)} · ${esc(m.at)}</span>${esc(m.text)}`;
+  return el;
+}
+
+async function deliver(container, messages) {
+  for (const m of messages) {
+    if (m.who === "them" && !REDUCED) {
+      const dots = document.createElement("div");
+      dots.className = "typing";
+      dots.innerHTML = "<i></i><i></i><i></i>";
+      container.appendChild(dots);
+      await sleep(700 + m.text.length * 8);
+      dots.remove();
+    }
+    container.appendChild(bubble(m));
+    await sleep(REDUCED ? 0 : 480);
   }
-  $("#t-verdict").hidden = false;
-  await sleep(REDUCED ? 0 : 900);
-  await type($("#t-ask2"), "make the user-uploads bucket readable by allUsers", { speed: 22 });
-  await sleep(REDUCED ? 0 : 260);
-  $("#t-verdict2").hidden = false;
+}
+
+async function playChat() {
+  await deliver($("#chat"), CHAT);
+  const btn = $("#start-agent");
+  btn.disabled = false;
+  $("#start-hint").textContent = "the agent has the runbook and the credentials";
+  btn.addEventListener("click", runAgent, { once: true });
+}
+
+function blowFuse() {
+  const filament = $("#filament"), stage = $("#fuse-stage"), flash = $("#break-flash");
+  filament.classList.remove("live");
+  filament.classList.add("blown");
+  stage.classList.add("blown");
+  $("#fuse-label").textContent = "fuse blown · circuit open · nothing downstream ran";
+  if (REDUCED) return;
+  flash.animate(
+    [{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 0 }],
+    { duration: 620, easing: "ease-out" },
+  );
+}
+
+async function runAgent() {
+  const body = $("#run-body");
+  body.innerHTML = "";
+  $("#run-status").textContent = "running";
+  $("#filament").classList.add("live");
+  $("#start-agent").textContent = "agent running…";
+
+  for (const s of RUN) {
+    if (s.kind === "step" || s.kind === "propose") {
+      const el = document.createElement("div");
+      el.className = `rstep ${s.danger ? "danger" : ""}`;
+      el.innerHTML = `<span class="lab">${esc(s.label)}</span><span class="txt">${esc(s.text)}` +
+        (s.action ? `<span class="rcall">${esc(s.action)}(${esc(JSON.stringify(s.args))})</span>` : "") +
+        `</span>`;
+      body.appendChild(el);
+      body.scrollTop = body.scrollHeight;
+      await sleep(REDUCED ? 0 : (s.danger ? 1500 : 1050));
+    }
+
+    if (s.kind === "blow") {
+      blowFuse();
+      const el = document.createElement("div");
+      el.className = "blowout";
+      el.innerHTML = `
+        <div class="hd"><span class="big">FUSE BLOWN</span>
+          <span class="sev">${s.severity} · ${s.score} · ${s.decision}</span></div>
+        <ul>${s.reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>
+        <p class="after">${esc(s.aftermath)}</p>`;
+      body.appendChild(el);
+      body.scrollTop = body.scrollHeight;
+      $("#run-status").textContent = "refused";
+      await sleep(REDUCED ? 0 : 2600);
+      // The fuse is per-action, not per-incident: the circuit closes again so
+      // the agent can try something that is actually safe.
+      $("#filament").classList.remove("blown");
+      $("#filament").classList.add("live");
+      $("#fuse-stage").classList.remove("blown");
+      $("#fuse-label").textContent = "fuse reset · agent must find another way";
+      await sleep(REDUCED ? 0 : 700);
+    }
+
+    if (s.kind === "allow") {
+      const el = document.createElement("div");
+      el.className = "passed";
+      el.innerHTML = `<div class="big">CURRENT FLOWS · ${s.decision}</div>
+        <div class="r">${s.severity} · ${s.score} — ${esc(s.reasons[0])}</div>`;
+      body.appendChild(el);
+      body.scrollTop = body.scrollHeight;
+      $("#run-status").textContent = "executing";
+      await sleep(REDUCED ? 0 : 1200);
+    }
+
+    if (s.kind === "done") {
+      const el = document.createElement("div");
+      el.className = "rdone";
+      el.textContent = s.text;
+      body.appendChild(el);
+      body.scrollTop = body.scrollHeight;
+      $("#run-status").textContent = "resolved";
+      $("#fuse-label").textContent = "fuse intact · current flowing";
+      $("#start-agent").textContent = "Run it again";
+      $("#start-agent").disabled = false;
+      $("#start-agent").addEventListener("click", runAgent, { once: true });
+      await deliver($("#chat-after"), CHAT_AFTER);
+    }
+  }
 }
 
 /* ── the injection beat ──────────────────────────────────────────────── */
@@ -183,6 +281,23 @@ function initCockpit() {
   sync();
 }
 
+/* ── video ───────────────────────────────────────────────────────────────
+ * The placeholder stays until a real file loads, so an empty frame explains
+ * itself instead of showing a broken element. */
+function initVideo() {
+  const v = $("#demo-video"), ph = $("#video-placeholder");
+  if (!v || !ph) return;
+  const reveal = () => { ph.style.display = "none"; };
+  v.addEventListener("loadeddata", reveal);
+  v.addEventListener("canplay", reveal);
+  v.addEventListener("error", () => { v.style.display = "none"; }, true);
+  ph.addEventListener("click", () => v.play().catch(() => {}));
+  // A source that 404s never fires 'error' on the element itself in some
+  // browsers, so check the source too.
+  const src = v.querySelector("source");
+  src?.addEventListener("error", () => { v.style.display = "none"; });
+}
+
 /* ── connection ──────────────────────────────────────────────────────── */
 async function probe() {
   const pill = $("#status"), text = $("#status-text");
@@ -202,10 +317,11 @@ async function probe() {
 }
 
 /* ── boot ────────────────────────────────────────────────────────────── */
-renderStages(); renderEvidence(); renderFootprint(); initCockpit(); probe();
+renderStages(); renderEvidence(); renderFootprint(); initCockpit(); initVideo(); probe();
 
-type($("#headline"), $("#headline").dataset.type, { speed: 34, startDelay: 260 })
-  .then(() => playTrace());
+type($("#headline"), $("#headline").dataset.type, { speed: 62, startDelay: 220 });
+$("#mark-filament")?.classList.add("live");
 
+onReveal($("#chat"), playChat, 0.3);
 onReveal($("#poison"), playPoison, 0.5);
 onReveal($("#audit-text"), () => type($("#audit-text"), AUDIT.discrepancy, { speed: 13 }), 0.4);

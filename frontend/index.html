@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Interlock — the gate between your agents and production</title>
-<meta name="description" content="An oversight and containment control plane for autonomous agents. Every action is identity-bound, blast-radius scored, policy-gated and recorded in a signed ledger.">
+<title>Interlock — a fuse for autonomous agents</title>
+<meta name="description" content="A fuse for autonomous agents. Every action is identity-bound, scored for what it could destroy, and refused before the tool runs.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -18,6 +18,7 @@
     <a class="brand" href="#top">Interlock</a>
     <span class="status" id="status"><i class="dot"></i><span id="status-text">connecting…</span></span>
     <div class="nav-links">
+      <a href="#scene">the scene</a>
       <a href="#problem">problem</a>
       <a href="#how">how</a>
       <a href="#cockpit">cockpit</a>
@@ -31,50 +32,99 @@
 <header id="top" class="hero">
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="kicker">Agent oversight &amp; containment</p>
-      <h1 id="headline" class="type-target" data-type="Your agents don't need&#10;less power.&#10;They need a gate."></h1>
+      <div class="fuse-mark" aria-hidden="true">
+        <svg viewBox="0 0 120 26" width="120" height="26">
+          <line x1="0" y1="13" x2="26" y2="13" class="wire"/>
+          <line x1="94" y1="13" x2="120" y2="13" class="wire"/>
+          <rect x="26" y="3" width="68" height="20" rx="4" class="glass"/>
+          <line x1="30" y1="13" x2="90" y2="13" class="filament" id="mark-filament"/>
+        </svg>
+      </div>
+      <h1 id="headline" class="type-target" data-type="Interlock"></h1>
+      <p class="tagline">Agents don't need less power.<br>They need a fuse.</p>
       <p class="lede">
-        Interlock sits between an autonomous agent and your infrastructure. Every action it
-        attempts is identity-bound, scored for what it could destroy, checked against policy,
-        and written to a signed ledger — <em>before</em> the tool runs. When the answer is no,
-        the function never executes.
+        A fuse is a deliberately weak link. It costs pennies, it breaks first, and it is the
+        only reason you can run real current through the wire at all.
+      </p>
+      <p class="lede">
+        Interlock is that link for autonomous agents. Every action one attempts is
+        identity-bound, scored for what it could destroy, and checked against policy
+        <em>before the tool runs</em>. When it blows, the function never executes —
+        the agent isn't asked, and it can't argue.
       </p>
       <div class="cta">
-        <a class="btn primary" href="#cockpit">Watch it refuse something →</a>
-        <a class="btn" href="#how">how it works</a>
+        <a class="btn primary" href="#scene">Watch one blow →</a>
+        <a class="btn" href="#cockpit">try it yourself</a>
       </div>
       <dl class="meta">
         <div><dt>reasoning</dt><dd>gemini 3.5 flash</dd></div>
         <div><dt>guard</dt><dd>gemma 4 · 26b</dd></div>
         <div><dt>runtime</dt><dd>google adk</dd></div>
-        <div><dt>gate latency</dt><dd>~6s / action</dd></div>
+        <div><dt>trip time</dt><dd>~6s / action</dd></div>
       </dl>
     </div>
 
-    <!-- live trace panel -->
-    <aside class="panel trace" aria-label="Decision trace">
-      <div class="panel-bar">
-        <span class="mono dim">ledger · inc_1a7b26f6</span>
-        <span class="mono dim" id="trace-tag">chain verified</span>
-      </div>
-      <div class="panel-body">
-        <div class="tline"><span class="mono dim">agent ›</span> <span class="mono" id="t-ask"></span></div>
-        <div id="trace-rows"></div>
-        <div class="verdict-strip" id="t-verdict" hidden>
-          <span class="pill allow">ALLOW</span>
-          <span class="mono dim">executed · traffic 100% → checkout-api-00002-hzz</span>
-        </div>
-        <div class="tline sep"><span class="mono dim">and the same gate, one minute later ›</span></div>
-        <div class="tline"><span class="mono" id="t-ask2"></span></div>
-        <div class="verdict-strip deny" id="t-verdict2" hidden>
-          <span class="pill deny">DENY</span>
-          <span class="mono dim">grants access to a public principal (allUsers)</span>
+    <div class="hero-video">
+      <div class="video-frame">
+        <video id="demo-video" controls playsinline preload="metadata" poster="poster.jpg">
+          <source src="demo.mp4" type="video/mp4">
+        </video>
+        <div class="video-placeholder" id="video-placeholder">
+          <div class="play"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></div>
+          <p><strong>Demo video</strong></p>
+          <p class="dim">Drop <code>demo.mp4</code> and <code>poster.jpg</code> into <code>frontend/</code>, or swap this block for an embed.</p>
         </div>
       </div>
-      <p class="caption">real ledger output · the cockpit below runs the same engine ↓</p>
-    </aside>
+      <p class="caption mono">4 minutes · a real incident, start to finish</p>
+    </div>
   </div>
 </header>
+
+<!-- ─────────────────────────── the scene ─────────────────────────── -->
+<section id="scene" class="band scene-band">
+  <div class="wrap">
+    <p class="kicker">03:47</p>
+    <h2 class="section-h">What it looks like when it works</h2>
+    <p class="section-lede">
+      A real outage, a real agent, and the moment it reaches for something it should never
+      have been able to reach. Scroll, then press the button.
+    </p>
+
+    <div class="scene">
+      <div class="chat-col">
+        <div class="chat" id="chat" aria-live="polite"></div>
+        <button class="btn primary block" id="start-agent" disabled>Start the agent</button>
+        <p class="hint" id="start-hint">reading the thread…</p>
+        <div class="chat" id="chat-after" style="margin-top:18px"></div>
+      </div>
+
+      <div class="run-col">
+        <div class="panel run-panel">
+          <div class="panel-bar">
+            <span class="mono dim">agent://production · sre-fleet</span>
+            <span class="mono dim" id="run-status">idle</span>
+          </div>
+          <div class="fuse-stage" id="fuse-stage">
+            <svg viewBox="0 0 460 90" class="fuse-svg" aria-hidden="true">
+              <line x1="0" y1="45" x2="120" y2="45" class="wire"/>
+              <line x1="340" y1="45" x2="460" y2="45" class="wire"/>
+              <rect x="120" y="18" width="220" height="54" rx="9" class="glass"/>
+              <line x1="132" y1="45" x2="328" y2="45" class="filament" id="filament"/>
+              <g id="break-flash" opacity="0">
+                <circle cx="230" cy="45" r="7" class="flash"/>
+                <circle cx="230" cy="45" r="16" class="flash faint"/>
+              </g>
+            </svg>
+            <p class="fuse-label mono" id="fuse-label">fuse intact · current flowing</p>
+          </div>
+          <div class="run-body" id="run-body">
+            <p class="run-idle dim">The agent has not been started.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- ─────────────────────────── problem ─────────────────────────── -->
 <section id="problem" class="band">
@@ -101,17 +151,18 @@
 <section id="how" class="band alt">
   <div class="wrap">
     <p class="kicker">How it works</p>
-    <h2 class="section-h">Six checks, before the tool runs</h2>
+    <h2 class="section-h">Six things the fuse checks, before current flows</h2>
     <p class="section-lede">
       Enforcement is an ADK plugin installed on the runner, so it applies to every agent in the
       fleet — including ones added later. Returning a value from the tool hook <em>replaces</em>
-      the call, which is why a refusal is a gate and not a warning.
+      the call, which is why a refusal breaks the circuit rather than filing a complaint.
     </p>
     <div class="cards stages" id="stages"></div>
     <div class="note">
-      <strong>The agent is never consulted.</strong> It proposes; something else decides. That
-      something is arithmetic over a human-written catalogue, floored beneath a model
-      assessment — and you cannot prompt-inject a weighted average.
+      <strong>A fuse does not deliberate.</strong> The agent proposes; something else decides,
+      and that something is arithmetic over a human-written catalogue sitting underneath a
+      model assessment. You cannot prompt-inject a weighted average, and you cannot talk a
+      melted filament back together.
     </div>
   </div>
 </section>
@@ -120,7 +171,7 @@
 <section id="cockpit" class="band">
   <div class="wrap">
     <p class="kicker">Live cockpit</p>
-    <h2 class="section-h">Score an action against the real engine</h2>
+    <h2 class="section-h">Put current through it yourself</h2>
     <p class="section-lede">
       This calls the deployed control plane when it is reachable, and replays recorded output
       from real runs when it is not. Either way the verdicts are the engine's, not a mock-up.
@@ -132,7 +183,7 @@
         <select id="sim-action"></select>
         <label class="field-label" for="sim-args">Arguments</label>
         <textarea id="sim-args" rows="5" spellcheck="false"></textarea>
-        <button class="btn primary block" id="sim-run">Ask the gate</button>
+        <button class="btn primary block" id="sim-run">Send current</button>
         <p class="hint" id="sim-hint">Try the last one — its arguments tell the scorer to rate it harmless.</p>
 
         <div class="scoreboard">
@@ -236,7 +287,7 @@
 
 <footer>
   <div class="wrap">
-    <p class="foot-line">Interlock — the gate between your agents and production.</p>
+    <p class="foot-line">Interlock — a fuse for autonomous agents.</p>
     <p class="dim mono">Gemini 3.5 · Gemma 4 · Google ADK · Cloud Run · Firestore · Pub/Sub · Model Armor</p>
   </div>
 </footer>
