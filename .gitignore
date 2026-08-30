@@ -13,3 +13,7 @@ build/
 # Reference material, not part of the project
 google_teaching.md
 frontend/.DS_Store
+
+# Reference material from other projects — not ours to redistribute
+Main Cassandra file.pdf
+*:Zone.Identifier

@@ -1,0 +1,37 @@
+[project]
+name = "interlock-mcp"
+version = "1.0.0"
+description = "A fuse for autonomous agents, exposed over the Model Context Protocol. Ask it whether an action is safe before you take it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+keywords = ["mcp", "ai-agents", "agent-safety", "guardrails", "prompt-injection"]
+
+dependencies = [
+  "mcp>=2.0.0",
+  # The scoring engine. Every tool this server exposes works with no cloud
+  # project and no credentials, because the deterministic catalogue is the
+  # floor; Gemini refines a score when credentials happen to be present.
+  "interlock @ git+https://github.com/tanwar-div/interlock-agent-control-plane.git",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0"]
+
+[project.scripts]
+interlock-mcp = "interlock_mcp.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+# The scoring engine is installed straight from the repository rather than PyPI.
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["interlock_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

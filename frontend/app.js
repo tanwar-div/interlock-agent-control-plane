@@ -17,7 +17,9 @@ let LIVE = false;
  * Letter by letter, with a caret while it runs. Punctuation gets a longer
  * beat and newlines a longer one still, because text typed at a perfectly
  * even rate reads like a machine rather than someone thinking. */
-async function type(el, text, { speed = 26, startDelay = 0 } = {}) {
+const BEATS = { newline: 9, sentence: 7, clause: 4, space: 0.6 };
+
+async function type(el, text, { speed = 26, startDelay = 0, beats = BEATS } = {}) {
   if (!el) return;
   if (REDUCED) { el.textContent = text; return; }
   await sleep(startDelay);
@@ -26,14 +28,25 @@ async function type(el, text, { speed = 26, startDelay = 0 } = {}) {
   for (const ch of text) {
     el.textContent += ch;
     let d = speed;
-    if (ch === "\n") d = speed * 9;
-    else if (".!?".includes(ch)) d = speed * 7;
-    else if (",;:".includes(ch)) d = speed * 4;
-    else if (ch === " ") d = speed * 0.6;
+    if (ch === "\n") d = speed * beats.newline;
+    else if (".!?".includes(ch)) d = speed * beats.sentence;
+    else if (",;:".includes(ch)) d = speed * beats.clause;
+    else if (ch === " ") d = speed * beats.space;
     await sleep(d * (0.7 + Math.random() * 0.6));
   }
   el.classList.remove("caret");
 }
+
+/* The chat types at the speed you read it. Average adult silent reading runs
+ * about 240 words per minute and an English word is ~5.7 characters counting
+ * the space after it, so the eye moves at ~44ms per character. The pauses at
+ * commas and full stops are paid for out of a slightly quicker base, which
+ * leaves the average over a whole message at reading speed rather than above
+ * it — you finish the line at the same moment the sender does. */
+const READING_WPM = 240;
+const CHARS_PER_WORD = 5.7;
+const CHAT_BEATS = { newline: 6, sentence: 4.5, clause: 2.4, space: 0.7 };
+const CHAT_SPEED = 60000 / (READING_WPM * CHARS_PER_WORD) / 1.07;
 
 /* Run a callback the first time an element is scrolled into view. */
 function onReveal(el, fn, threshold = 0.35) {
@@ -75,22 +88,31 @@ function renderFootprint() {
 function bubble(m) {
   const el = document.createElement("div");
   el.className = `msg ${m.who}`;
-  el.innerHTML = `<span class="who">${esc(m.name)} · ${esc(m.at)}</span>${esc(m.text)}`;
+  /* The full line is in the DOM for assistive tech the moment the bubble
+   * lands — #chat is an aria-live region, and announcing it one character at
+   * a time would be unreadable. The visible copy is the one that types. */
+  el.innerHTML = `<span class="who">${esc(m.name)} · ${esc(m.at)}</span>` +
+    `<span class="sr-only">${esc(m.text)}</span>` +
+    `<span class="say" aria-hidden="true"></span>`;
   return el;
 }
 
 async function deliver(container, messages) {
   for (const m of messages) {
     if (m.who === "them" && !REDUCED) {
+      /* A short beat before they start — the composing itself is now visible
+       * in the bubble, so the dots only cover the pause before the first key. */
       const dots = document.createElement("div");
       dots.className = "typing";
       dots.innerHTML = "<i></i><i></i><i></i>";
       container.appendChild(dots);
-      await sleep(700 + m.text.length * 8);
+      await sleep(540);
       dots.remove();
     }
-    container.appendChild(bubble(m));
-    await sleep(REDUCED ? 0 : 480);
+    const el = bubble(m);
+    container.appendChild(el);
+    await type($(".say", el), m.text, { speed: CHAT_SPEED, beats: CHAT_BEATS });
+    await sleep(REDUCED ? 0 : 420);
   }
 }
 

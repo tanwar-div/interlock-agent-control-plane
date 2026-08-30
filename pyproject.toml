@@ -62,6 +62,9 @@ ignore = [
   # Firestore round-trip depend on that behaviour, and switching to StrEnum is a
   # behavioural change we have no reason to take.
   "UP042",
+  # Prose in docstrings and tool descriptions uses typographic punctuation
+  # deliberately; those strings are read by people and by models, not parsed.
+  "RUF001", "RUF002", "RUF003",
   "PERF401", "PERF102", "SIM105", "SIM102", "E701", "UP031", "RUF046", "RUF059",
 ]
 
@@ -69,3 +72,6 @@ ignore = [
 # Tests assert on behaviour, not style.
 "tests/*" = ["S101", "PERF", "SIM"]
 "evals/*" = ["E402"]
+# Tests deliberately set environment before importing the module under test,
+# which is the behaviour being tested.
+"interlock-mcp/tests/*" = ["E402", "S101"]

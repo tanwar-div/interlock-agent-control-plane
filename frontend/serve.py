@@ -17,7 +17,7 @@ import http.server
 import pathlib
 import socketserver
 
-PORT = 5173
+PORT = 5180
 ROOT = pathlib.Path(__file__).resolve().parent
 
 

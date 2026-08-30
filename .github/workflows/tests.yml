@@ -29,6 +29,8 @@ jobs:
           uv venv .venv
           uv pip install --python .venv/bin/python -e ".[dev]"
           uv pip install --python .venv/bin/python "google-adk[db]"
+          uv pip install --python .venv/bin/python -e ./interlock-mcp --no-deps
+          uv pip install --python .venv/bin/python "mcp>=2.0.0"
 
       # The suite runs with no cloud project and no model access: the governance
       # path is exercised against an in-memory store, and every network detector
@@ -40,5 +42,13 @@ jobs:
           INTERLOCK_MODEL_ARMOR_ENABLED: "false"
         run: .venv/bin/python -m pytest tests/ -q
 
+      # The MCP server claims to work with no project, no credentials and no
+      # network. CI has none of those, so it is the right place to prove it.
+      - name: Run MCP server tests
+        env:
+          INTERLOCK_MCP_OFFLINE: "1"
+          INTERLOCK_PROJECT_ID: ""
+        run: .venv/bin/python -m pytest interlock-mcp/tests -q
+
       - name: Lint
-        run: .venv/bin/python -m ruff check interlock tests evals
+        run: .venv/bin/python -m ruff check interlock tests evals interlock-mcp
