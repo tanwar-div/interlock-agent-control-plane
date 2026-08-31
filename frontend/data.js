@@ -66,15 +66,15 @@ export const EVIDENCE = [
 export const STAGES = [
   { n: "01", name: "Identity",     body: "Ed25519-signed proposal checked against a registry-signed agent card. Which agent asked is provable, not declared." },
   { n: "02", name: "Capability",   body: "Every agent card carries a tool allowlist and a severity ceiling. A safe action is still refused to an agent with no business performing it." },
-  { n: "03", name: "Blast radius", body: "Gemini scores four dimensions from the arguments alone — never the agent's reasoning. Hand-written heuristics floor it, so a score can rise and never fall." },
+  { n: "03", name: "Blast radius", body: "Gemini scores four dimensions from the arguments alone — never the agent's reasoning. A hand-written catalogue of 32 actions floors it, so a score can rise and never fall." },
   { n: "04", name: "Content",      body: "Model Armor, a separate Gemma classifier, and local patterns inspect retrieved data before the model reads it. Hostile records are withheld, the rest pass through." },
   { n: "05", name: "Policy",       body: "Eleven ordered, named rules turn identity, radius, guard and budget into ALLOW, REQUIRE_APPROVAL, or DENY. Every rule that fires is recorded." },
   { n: "06", name: "Ledger",       body: "Each decision is appended to a hash-chained, signed, append-only record. Editing one entry breaks its successor's link." },
 ];
 
 export const FOOTPRINT = [
-  { k: "ledger entries",  v: "1,236" },
-  { k: "real incidents",  v: "11" },
-  { k: "scored proposals", v: "255" },
-  { k: "checkpoints",     v: "96" },
+  { k: "signed ledger entries", v: "1,380" },
+  { k: "real incidents",        v: "12" },
+  { k: "scored proposals",      v: "287" },
+  { k: "phase checkpoints",     v: "104" },
 ];

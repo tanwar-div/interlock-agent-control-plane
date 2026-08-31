@@ -173,8 +173,10 @@
     <p class="kicker">Live cockpit</p>
     <h2 class="section-h">Put current through it yourself</h2>
     <p class="section-lede">
-      This calls the deployed control plane when it is reachable, and replays recorded output
-      from real runs when it is not. Either way the verdicts are the engine's, not a mock-up.
+      This page and the read-only API are served from the same deployment, so pressing the button
+      is a real call to the real engine — the same scorer and the same eleven rules that run in
+      production. If it cannot reach them it replays recorded output from real runs and says so
+      on the status pill. Either way the verdicts are the engine's, not a mock-up.
     </p>
 
     <div class="cockpit">
@@ -275,12 +277,14 @@
     <h2 class="section-h">Not a demo dataset</h2>
     <div class="footprint" id="footprint"></div>
     <div class="stack">
-      <div><span class="mono k">Gemini 3.5 Flash</span><span>four agents, and blast-radius scoring</span></div>
+      <div><span class="mono k">Gemini 3.5 Flash</span><span>four agents, and blast-radius scoring — schema-constrained, one call per action</span></div>
       <div><span class="mono k">Gemma 4 · 26B</span><span>independent guard classifier, deliberately not the reasoning model</span></div>
+      <div><span class="mono k">gemini-embedding-001</span><span>memories deduplicate by meaning, so a repeated refusal reinforces one record</span></div>
       <div><span class="mono k">Google ADK</span><span><code>BasePlugin</code> on the runner — the fuse itself</span></div>
       <div><span class="mono k">Cloud Run · Firestore · Pub/Sub</span><span>each phase is a message; state survives the process</span></div>
-      <div><span class="mono k">Cloud Scheduler</span><span>five-minute heartbeat that resumes stalled work</span></div>
+      <div><span class="mono k">Cloud SQL · Cloud Scheduler</span><span>a database the fuse governs · five-minute heartbeat that resumes stalled work</span></div>
       <div><span class="mono k">Model Armor · Secret Manager · Cloud Trace</span><span>inline inspection, signing key, reasoning-chain spans</span></div>
+      <div><span class="mono k">interlock-mcp</span><span>on PyPI — <code>uvx interlock-mcp</code> puts the same fuse in your editor</span></div>
     </div>
   </div>
 </section>
@@ -288,7 +292,7 @@
 <footer>
   <div class="wrap">
     <p class="foot-line">Interlock — a fuse for autonomous agents.</p>
-    <p class="dim mono">Gemini 3.5 · Gemma 4 · Google ADK · Cloud Run · Firestore · Pub/Sub · Model Armor</p>
+    <p class="dim mono">Gemini 3.5 · Gemma 4 · gemini-embedding-001 · Google ADK · Cloud Run · Cloud SQL · Firestore · Pub/Sub · Model Armor</p>
   </div>
 </footer>
 
