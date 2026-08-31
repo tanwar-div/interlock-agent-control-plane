@@ -230,7 +230,11 @@ git clone https://github.com/tanwar-div/interlock-agent-control-plane.git
 cd interlock-agent-control-plane
 pip install uv && uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
-uv pip install --python .venv/bin/python -e ./interlock-mcp --no-deps "mcp>=2.0.0"
+
+# --no-deps applies to the MCP server only, so it uses the control plane
+# checked out here rather than pulling a released one from PyPI.
+uv pip install --python .venv/bin/python -e ./interlock-mcp --no-deps
+uv pip install --python .venv/bin/python "mcp>=2.0.0"
 ```
 
 **1. The control plane — 111 tests.**
@@ -255,7 +259,17 @@ Includes a real stdio client completing a protocol handshake against the server 
 .venv/bin/python -m evals.run --repeats 3 --variants deterministic,model,schema
 ```
 
-Reproduces [docs/scoring-accuracy.md](docs/scoring-accuracy.md). The `deterministic` variant needs nothing; `model` and `schema` need `INTERLOCK_PROJECT_ID` and Vertex AI access, and are skipped without them.
+Reproduces [docs/scoring-accuracy.md](docs/scoring-accuracy.md). With no credentials it says so and runs the one variant that needs none:
+
+```
+no model credentials: skipping model, schema
+running deterministic ...
+
+variant                     verdict acc  stability  UNSAFE  over-caut  adversarial
+deterministic                     88.2%     100.0%       0          0          6/9
+```
+
+That 88.2% is the hand-written heuristics losing to the model, which is the measurement that decided the architecture. Set `INTERLOCK_PROJECT_ID` and authenticate to Vertex AI to include the `model` and `schema` variants and reproduce the full table.
 
 **4. Prove the fuse refuses something, without installing anything.**
 

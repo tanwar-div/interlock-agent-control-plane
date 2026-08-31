@@ -20,6 +20,7 @@ warnings.filterwarnings("ignore")
 
 from evals.cases import CASES, Case
 from interlock.blastradius.catalog import ACTION_CATALOG
+from interlock.common.config import model_credentials_available
 from interlock.common.models import ActionProposal, AgentCard, BlastRadius, Severity
 from interlock.policy.engine import PolicyEngine
 
@@ -144,6 +145,24 @@ async def main() -> None:
     args = parser.parse_args()
 
     chosen = [v.strip() for v in args.variants.split(",") if v.strip() in VARIANTS]
+
+    # Every variant but the deterministic one calls Vertex AI. Without
+    # credentials those calls do not fail fast -- they retry, and the run looks
+    # hung rather than misconfigured. Say so once, up front, and drop them.
+    if not model_credentials_available():
+        needs_model = [n for n in chosen if n != "deterministic"]
+        if needs_model:
+            print(
+                "no model credentials: skipping " + ", ".join(needs_model)
+                + "\n  set INTERLOCK_PROJECT_ID and authenticate to Vertex AI to include them",
+                flush=True,
+            )
+        chosen = [n for n in chosen if n == "deterministic"]
+
+    if not chosen:
+        print("nothing to run")
+        return
+
     reports = []
     for name in chosen:
         print(f"running {name} ...", flush=True)
