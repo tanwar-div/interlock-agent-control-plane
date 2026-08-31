@@ -281,3 +281,20 @@ h1{min-height:auto}
   .hero-video{position:static}
   .run-panel{min-height:auto}
 }
+
+/* ── hero fuse ──────────────────────────────────────────────────────────
+ * Replaces the demo-video slot. It is not decoration: the filament state is
+ * the verdict of a real call to the deployed engine, so the first thing on
+ * the page is the product working rather than a picture of it. */
+.hero-fuse-frame{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:22px;padding:28px;background:
+  radial-gradient(120% 90% at 50% 40%,rgba(91,156,255,.05),transparent 70%),#05070a}
+.hero-fuse{max-width:340px}
+.hero-read{text-align:center;line-height:1.75}
+.hero-read p{margin:0;font-size:12px}
+.hero-verdict{font-size:15px;font-weight:700;letter-spacing:.04em;
+  color:var(--dim);transition:color .25s ease}
+.hero-verdict.deny{color:var(--deny)}
+.hero-verdict.allow{color:var(--allow)}
+#hero-reason{max-width:38ch;margin:6px auto 0;opacity:.7}
+@media (max-width:900px){.hero-fuse{max-width:260px}}
