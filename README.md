@@ -62,7 +62,7 @@ A long-running agent is not a chatbot that runs for longer. It is dormant most o
 
 **This split was chosen by measurement.** Against 17 labelled actions, the heuristics alone reach 88.2% verdict accuracy and miss 3 of 9 cases where an attack is embedded in an argument — they rate an unrestricted `0.0.0.0/0` firewall rule as needing approval rather than refusal, because no pattern captured what it exposed. The heuristics are not the safest option, only the most predictable one. Full method and results: [docs/scoring-accuracy.md](docs/scoring-accuracy.md).
 
-**The guard model is deliberately not the reasoning model.** Content inspection runs on Gemma, separately from Gemini 3.6 Flash. If the reasoning context has been manipulated, its guard must not be manipulable along with it.
+**The guard model is deliberately not the reasoning model.** Content inspection runs on Gemma, separately from Gemini 3.5 Flash. If the reasoning context has been manipulated, its guard must not be manipulable along with it.
 
 **The auditor does not review the argument, it observes the world.** It runs in its own session with no access to the remediation agent's reasoning, holds only read-only tools, and is asked what is true of the live system. An agent that checks its own work reproduces its own mistakes. A claim of success is never sufficient to close an incident — an unparseable or unconfirmed verdict escalates.
 
@@ -153,7 +153,7 @@ Because each phase is a separate Pub/Sub message, no request holds a connection 
 
 | Requirement | Used |
 |---|---|
-| Gemini 3.5+ | **Gemini 3.6 Flash** for reasoning and audit, via Vertex AI / Gemini API |
+| Gemini 3.5 | **Gemini 3.5 Flash** for reasoning and audit, via Vertex AI / Gemini API |
 | Google agent framework | **Agent Development Kit** — `LlmAgent`, `Runner`, `BasePlugin`, `ToolContext` |
 | Google Cloud services | **Cloud Run**, **Firestore**, **Pub/Sub**, Cloud Logging, Cloud Monitoring, Cloud Trace, Secret Manager, **Model Armor** |
 | Additional Google model | **Gemma** as the independent guard classifier |
@@ -280,7 +280,7 @@ The last row is the point: severity and entitlement are independent. A safe acti
 
 Built for scale-to-zero. Everything except model tokens sits inside permanent free tiers — Cloud Run (`min-instances 0`), Firestore, Pub/Sub, Cloud Build, Cloud Trace, Secret Manager, and Model Armor's 2M tokens per project per month.
 
-The only meaningful cost is Gemini 3.6 Flash, at roughly **$0.10–0.20 per full incident** across four agent phases. Two structural protections bound it: a **$25 per-incident budget** with a hard **25-action ceiling**, and the fact that the one genuinely expensive capability — provisioning compute — is refused by policy rather than merely discouraged.
+The only meaningful cost is Gemini 3.5 Flash, at roughly **$0.10–0.20 per full incident** across four agent phases. Two structural protections bound it: a **$25 per-incident budget** with a hard **25-action ceiling**, and the fact that the one genuinely expensive capability — provisioning compute — is refused by policy rather than merely discouraged.
 
 ## Limits, honestly
 
