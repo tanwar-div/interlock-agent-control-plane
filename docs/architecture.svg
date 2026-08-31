@@ -23,11 +23,11 @@
 
 <rect width="1080" height="700" fill="#f8fafc"/>
 <text x="34" y="38" font-size="19" font-weight="700" fill="#0f172a">Interlock — agent oversight and containment control plane</text>
-<text x="34" y="58" class="s">Every action an agent takes is authenticated, scored, gated and recorded before it can reach infrastructure.</text>
+<text x="34" y="58" class="s">Every action an agent takes is authenticated, scored, refused and recorded before it can reach infrastructure.</text>
 
 <!-- WORKER PLANE -->
-<rect x="34" y="82" width="472" height="286" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="52" y="106" class="hd">WORKER PLANE — the SRE fleet</text>
+<rect x="34" y="82" width="472" height="298" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="52" y="106" class="hd">CALLERS — the SRE fleet, or anyone's agent</text>
 
 <rect x="52" y="120" width="200" height="52" rx="7" fill="#eff6ff" stroke="#93c5fd"/>
 <text x="64" y="140" class="t">Cloud Monitoring alert</text>
@@ -42,7 +42,7 @@
 <rect x="292" y="150" width="182" height="40" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
 <text x="303" y="167" class="t">Triage</text><text x="303" y="181" class="m">ceiling NEGLIGIBLE</text>
 <rect x="292" y="196" width="182" height="40" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="303" y="213" class="t">Investigation</text><text x="303" y="227" class="m">ceiling LOW · read-only</text>
+<text x="303" y="213" class="t">Investigator</text><text x="303" y="227" class="m">ceiling LOW · read-only</text>
 <rect x="292" y="242" width="182" height="40" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
 <text x="303" y="259" class="t">Remediation</text><text x="303" y="273" class="m">ceiling HIGH</text>
 <rect x="292" y="288" width="182" height="46" rx="6" fill="#faf5ff" stroke="#d8b4fe"/>
@@ -50,13 +50,16 @@
 <text x="303" y="319" class="m">no shared context</text>
 <text x="303" y="331" class="m">read-only · ceiling LOW</text>
 
-<text x="52" y="256" class="s">Each phase is one Pub/Sub message,</text>
-<text x="52" y="271" class="s">so no request is held open while an</text>
-<text x="52" y="286" class="s">agent thinks. An incident can span</text>
-<text x="52" y="301" class="s">hours on scale-to-zero infra.</text>
-<rect x="52" y="314" width="200" height="40" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
-<text x="64" y="331" class="t">Gemini 3.5 Flash</text>
-<text x="64" y="345" class="m">reasoning + audit</text>
+<text x="52" y="252" class="s">One Pub/Sub message per phase, so an</text>
+<text x="52" y="267" class="s">incident can span hours on scale-to-zero.</text>
+
+<rect x="52" y="280" width="200" height="46" rx="7" fill="#eef2ff" stroke="#a5b4fc"/>
+<text x="64" y="299" class="t">Any agent · MCP</text>
+<text x="64" y="315" class="m">Claude Code · Cursor · CI · yours</text>
+
+<rect x="52" y="334" width="200" height="40" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+<text x="64" y="351" class="t">Gemini 3.5 Flash</text>
+<text x="64" y="365" class="m">reasoning + audit</text>
 
 <line x1="152" y1="172" x2="152" y2="184" stroke="#64748b" marker-end="url(#a)"/>
 <line x1="252" y1="209" x2="290" y2="209" stroke="#64748b" marker-end="url(#a)"/>
@@ -96,6 +99,9 @@
 
 <path d="M488 235 C 512 235, 512 200, 546 200" fill="none" stroke="#0f172a" stroke-width="1.6" marker-end="url(#a)"/>
 <text x="470" y="215" class="m" fill="#0f172a">tool call</text>
+<polyline points="252,303 266,303 266,368 520,368 520,300 528,300" fill="none"
+          stroke="#6366f1" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#a)"/>
+<text x="290" y="363" class="m" fill="#6366f1">same fuse · stdio</text>
 
 <!-- OUTCOMES -->
 <text x="866" y="106" class="hd">OUTCOME</text>
@@ -142,11 +148,12 @@
 
 <!-- OBSERVABILITY -->
 <rect x="34" y="556" width="472" height="112" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
-<text x="52" y="580" class="hd">OBSERVABILITY — Cloud Trace + Cloud Run</text>
-<text x="52" y="600" class="s">OpenTelemetry spans following GenAI semantic conventions: every agent run,</text>
-<text x="52" y="617" class="s">model call and tool execution, with policy decisions in the same trace as the</text>
-<text x="52" y="634" class="s">call they prevented. Deployed on Cloud Run, scale-to-zero, min-instances 0.</text>
-<text x="52" y="655" class="m">Gemini 3.5 Flash · Gemma guard · ADK · Firestore · Pub/Sub · Model Armor · Secret Manager</text>
+<text x="52" y="580" class="hd">OBSERVABILITY — Cloud Trace + OpenTelemetry</text>
+<text x="52" y="601" class="s">OpenTelemetry spans following GenAI semantic conventions: every agent run,</text>
+<text x="52" y="618" class="s">model call and tool execution — policy decisions sit in the same trace as the</text>
+<text x="52" y="635" class="s">call they prevented.</text>
+<text x="52" y="648" class="m">Gemini 3.5 Flash · Gemma 4 · gemini-embedding-001 · ADK · Cloud Run · Cloud SQL</text>
+<text x="52" y="662" class="m">Firestore · Pub/Sub · Cloud Scheduler · Model Armor · Secret Manager</text>
 
 <rect x="530" y="592" width="518" height="76" rx="10" fill="#0f172a"/>
 <text x="548" y="618" font-size="12" font-weight="700" fill="#f8fafc">The property the system rests on</text>

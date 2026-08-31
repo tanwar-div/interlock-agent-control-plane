@@ -1,6 +1,6 @@
 # Interlock — a fuse for autonomous agents
 
-*Built for the **Google All Things Agentic Hackathon**. This post was written as part of that submission.*
+*A solo build for the **Google All Things Agentic Hackathon**. This post was written as part of that submission.*
 
 **Try it:** <https://interlock-public-610063873432.us-central1.run.app> · **Install it:** `uvx interlock-mcp`
 
