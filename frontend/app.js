@@ -1,11 +1,12 @@
 import { DENIALS, ADVERSARIAL, POISONED_LOG, AUDIT, EVIDENCE, STAGES, FOOTPRINT } from "./data.js";
 import { CHAT, RUN, CHAT_AFTER } from "./scene.js";
 
-/* The control plane is not public. When you are running
- *   gcloud run services proxy interlock --region us-central1 --port 8080
- * this page scores against the deployed engine. Otherwise it replays recorded
- * output from real runs and says so, rather than pretending to be live. */
-const API = new URLSearchParams(location.search).get("api") || "http://localhost:8080";
+/* Same origin by default, because the public deployment serves this page and
+ * the read-only API together: scoring an action here is a real call to the real
+ * engine. ?api= points it elsewhere for local development. If nothing answers,
+ * the page replays recorded output from real runs and says so on the status
+ * pill, rather than pretending to be live. */
+const API = new URLSearchParams(location.search).get("api") ?? "";
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -267,7 +268,7 @@ async function ask() {
   try { parameters = JSON.parse($("#sim-args").value); }
   catch { $("#sim-hint").textContent = "Arguments must be valid JSON."; return; }
 
-  btn.disabled = true; btn.textContent = "asking the gate…";
+  btn.disabled = true; btn.textContent = "asking the fuse…";
   $("#sim-result").innerHTML = `<div class="empty"><div class="ring"></div><p class="dim">scoring…</p></div>`;
 
   let res = null;
@@ -292,7 +293,7 @@ async function ask() {
   if (!res) { await sleep(700); res = s.recorded; }
 
   paint(res);
-  btn.disabled = false; btn.textContent = "Ask the gate";
+  btn.disabled = false; btn.textContent = "Ask the fuse";
 }
 
 function initCockpit() {
@@ -333,8 +334,8 @@ async function probe() {
   } catch {
     LIVE = false;
     pill.className = "status offline";
-    text.textContent = "recorded · start the proxy for live";
-    pill.title = "gcloud run services proxy interlock --region us-central1 --port 8080";
+    text.textContent = "recorded · engine unreachable";
+    pill.title = "Served without the read-only API. Scores below are recorded output from real runs.";
   }
 }
 

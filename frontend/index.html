@@ -197,7 +197,7 @@
           <div class="empty" id="sim-empty">
             <div class="ring"></div>
             <p><strong>Nothing has been asked yet.</strong></p>
-            <p class="dim">Pick an action and the gate will score it — identity, blast radius,
+            <p class="dim">Pick an action and the fuse will score it — identity, blast radius,
             content, then policy — and tell you exactly why.</p>
           </div>
         </div>
@@ -277,7 +277,7 @@
     <div class="stack">
       <div><span class="mono k">Gemini 3.5 Flash</span><span>four agents, and blast-radius scoring</span></div>
       <div><span class="mono k">Gemma 4 · 26B</span><span>independent guard classifier, deliberately not the reasoning model</span></div>
-      <div><span class="mono k">Google ADK</span><span><code>BasePlugin</code> on the runner — the gate itself</span></div>
+      <div><span class="mono k">Google ADK</span><span><code>BasePlugin</code> on the runner — the fuse itself</span></div>
       <div><span class="mono k">Cloud Run · Firestore · Pub/Sub</span><span>each phase is a message; state survives the process</span></div>
       <div><span class="mono k">Cloud Scheduler</span><span>five-minute heartbeat that resumes stalled work</span></div>
       <div><span class="mono k">Model Armor · Secret Manager · Cloud Trace</span><span>inline inspection, signing key, reasoning-chain spans</span></div>
