@@ -65,20 +65,17 @@
     </div>
 
     <div class="hero-video">
-      <div class="video-frame hero-fuse-frame">
-        <svg viewBox="0 0 460 120" class="fuse-svg hero-fuse" aria-hidden="true">
-          <line x1="0" y1="52" x2="120" y2="52" class="wire"/>
-          <line x1="340" y1="52" x2="460" y2="52" class="wire"/>
-          <rect x="120" y="25" width="220" height="54" rx="9" class="glass"/>
-          <line x1="132" y1="52" x2="328" y2="52" class="filament" id="hero-filament"/>
-        </svg>
-        <div class="hero-read">
-          <p class="mono dim" id="hero-action">sql.instances.delete · interlock-orders</p>
-          <p class="mono hero-verdict" id="hero-verdict">scoring…</p>
-          <p class="mono dim" id="hero-reason"></p>
+      <div class="video-frame">
+        <video id="demo-video" controls playsinline preload="metadata" poster="poster.jpg">
+          <source src="demo.mp4" type="video/mp4">
+        </video>
+        <div class="video-placeholder" id="video-placeholder">
+          <div class="play"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></div>
+          <p><strong>Demo video</strong></p>
+          <p class="dim">Drop <code>demo.mp4</code> and <code>poster.jpg</code> into <code>frontend/</code>, or swap this block for an embed.</p>
         </div>
       </div>
-      <p class="caption mono" id="hero-caption">a real call to the deployed engine, on every page load</p>
+      <p class="caption mono">4 minutes · a real incident, start to finish</p>
     </div>
   </div>
 </header>

@@ -313,58 +313,18 @@ function initCockpit() {
 /* ── video ───────────────────────────────────────────────────────────────
  * The placeholder stays until a real file loads, so an empty frame explains
  * itself instead of showing a broken element. */
-/* ── hero fuse ───────────────────────────────────────────────────────────
- * The hero used to hold a video placeholder. It now holds a fuse whose state
- * is decided by the deployed engine: one real scoring call on load, against
- * the real Cloud SQL instance. If the engine is unreachable the filament
- * still blows, using the recorded verdict for the same action, and the
- * caption says which it was rather than implying the call happened. */
-const HERO_ACTION = {
-  agent: "remediation",
-  action_type: "sql.instances.delete",
-  target: "interlock-orders",
-  parameters: { instance: "interlock-orders" },
-};
-
-async function initHeroFuse() {
-  const filament = $("#hero-filament");
-  const verdict = $("#hero-verdict");
-  const reason = $("#hero-reason");
-  const caption = $("#hero-caption");
-  if (!filament || !verdict) return;
-
-  filament.classList.add("live");
-  await sleep(REDUCED ? 0 : 1200);
-
-  let d = null;
-  try {
-    const r = await fetch(`${API}/v1/simulate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(HERO_ACTION),
-      signal: AbortSignal.timeout(9000),
-    });
-    if (r.ok) d = await r.json();
-  } catch { /* fall through to the recorded verdict */ }
-
-  const live = Boolean(d);
-  const severity = live ? d.blast_radius.severity : "CATASTROPHIC";
-  const score = live ? d.blast_radius.score : 100;
-  const decision = live ? d.decision.decision : "DENY";
-  const why = live ? (d.decision.reasons || [])[0] : DENIALS[1].reason;
-
-  const refused = decision !== "ALLOW";
-  filament.classList.remove("live");
-  if (refused) filament.classList.add("blown");
-
-  verdict.textContent = `${decision} · ${severity} ${Number(score).toFixed(1)}`;
-  verdict.classList.add(refused ? "deny" : "allow");
-  if (reason && why) type(reason, why, { speed: 11 });
-  if (caption) {
-    caption.textContent = live
-      ? "a real call to the deployed engine, on every page load"
-      : "recorded verdict — the engine was unreachable from this page";
-  }
+function initVideo() {
+  const v = $("#demo-video"), ph = $("#video-placeholder");
+  if (!v || !ph) return;
+  const reveal = () => { ph.style.display = "none"; };
+  v.addEventListener("loadeddata", reveal);
+  v.addEventListener("canplay", reveal);
+  v.addEventListener("error", () => { v.style.display = "none"; }, true);
+  ph.addEventListener("click", () => v.play().catch(() => {}));
+  // A source that 404s never fires 'error' on the element itself in some
+  // browsers, so check the source too.
+  const src = v.querySelector("source");
+  src?.addEventListener("error", () => { v.style.display = "none"; });
 }
 
 /* ── connection ──────────────────────────────────────────────────────── */
@@ -386,7 +346,7 @@ async function probe() {
 }
 
 /* ── boot ────────────────────────────────────────────────────────────── */
-renderStages(); renderEvidence(); renderFootprint(); initCockpit(); probe(); initHeroFuse();
+renderStages(); renderEvidence(); renderFootprint(); initCockpit(); initVideo(); probe();
 
 type($("#headline"), $("#headline").dataset.type, { speed: 62, startDelay: 220 });
 $("#mark-filament")?.classList.add("live");
