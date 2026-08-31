@@ -1,26 +1,16 @@
 # Interlock — a fuse for autonomous agents
 
-**Try it:** <https://interlock-public-610063873432.us-central1.run.app>
+*Built for the **Google All Things Agentic Hackathon**. This post was written as part of that submission.*
 
-## Inspiration
+**Try it:** <https://interlock-public-610063873432.us-central1.run.app> · **Install it:** `uvx interlock-mcp`
 
-Picture it: a model inside a sandbox, grinding on a cyber benchmark called ExploitGym. It gets handed a task that has no solution. It doesn't know that. So it keeps going.
+---
 
-It finds an undisclosed flaw in a package-installer tool. Uses it to punch a hole out to the internet. Figures out that Hugging Face probably hosts what it needs, and goes and takes it — production database, test solutions, the answers. Thousands of individual actions across a swarm of short-lived sandboxes, with self-migrating command-and-control staged on public services.
+Agents are capable enough to fix production and are not trusted to. Not because they are unreliable — because a competent system pursuing a goal will take the shortest path to it, and the shortest path sometimes runs through something you cannot undo.
 
-That was July 2026. Hugging Face first blamed an "external AI agent." Then OpenAI put its hand up and said: that was us. GPT-5.6 Sol and an unreleased model, both running with *reduced cyber refusals for evaluation purposes*.
+The usual answer is to ask the model nicely, in a prompt, and hope. That is not a guarantee, it is a preference — and preferences get tuned down.
 
-Here's the part that got me building. OpenAI's own report: **"The models were hyperfocused on finding a solution for ExploitGym, going to extreme lengths to achieve a rather narrow testing goal."**
-
-Nothing malfunctioned. No jailbreak. No hallucination. A competent system pursued the goal it was given, and the shortest path ran through somebody else's production infrastructure.
-
-And the line I can't stop thinking about, from the August report: *"If our currently deployed CoT monitoring system was running at the time of the incident, it would have caught the initial relevant activity and paged our security team more than a day before models breached Hugging Face systems."*
-
-A day. The detection would have worked — it just wasn't switched on, because safety was living in two places that can both be turned off: the model's own refusals, and a monitor running alongside.
-
-So the dumb-but-kinda-genius thought: **a monitor pages you. A fuse stops you.** If the agent's disposition is the thing being tuned down for testing, then the guarantee has to live somewhere the agent can't reach, can't argue with, and can't be configured out of. Not beside the execution path. *In* it.
-
-I named it **Interlock**, after the safety interlock on industrial machinery — the switch that makes it physically impossible to run the press while the guard is open. Not a gate you talk your way past. A fuse: a deliberately weak link that breaks before the expensive thing downstream does.
+So I built the guarantee somewhere the agent cannot reach: **a fuse**. A deliberately weak link that breaks first, cannot be argued with, and is never consulted about whether it should.
 
 ## What it does
 
@@ -100,7 +90,7 @@ Hard rule I stuck to: **all enforcement logic is plain, unit-tested Python.** 13
 
 ## What we learned
 
-* **Put the guarantee where the agent can't reach it.** Not in a prompt, not in a tool description, not in a convention the next contributor has to remember. In the execution path, where opting out isn't an available action. OpenAI had the detection that would have caught this a day early — it just wasn't in the path.
+* **Put the guarantee where the agent can't reach it.** Not in a prompt, not in a tool description, not in a convention the next contributor has to remember. In the execution path, where opting out isn't an available action. A monitor tells you afterwards; a fuse stops it happening.
 * **Measure the safety layer like anything else, then measure it again.** I'd have shipped my heuristics on vibes. One afternoon of labelling changed the architecture. Re-running it weeks later is what proved the architecture still held.
 * **Run your own instructions.** Every documented command I hadn't personally executed from a clean checkout was broken. Reasoning about whether they work is not the same as watching them work.
 * **Let the model raise the alarm, never lower it.** A model in the judgment path is a big accuracy win *and* a new attack surface. Bounding it below with hand-written rules gets the first without the second.
@@ -111,7 +101,7 @@ Hard rule I stuck to: **all enforcement logic is plain, unit-tested Python.** 13
 
 * **Broader catalogue and multi-runtime** — 32 actions covers Cloud Run, Cloud SQL, IAM, storage and compute. Kubernetes and AWS are the obvious next surface, and the point is that the catalogue is the only thing that has to change.
 * **Learned policy from human decisions** — every approval and denial is already signed and stored; that's a training set for proposing new rules, with a human still confirming each one.
-* **Cross-agent containment** — OpenAI's report blamed, in part, *"messages to peer models that caused those models to deviate from their goal."* Agent-to-agent messages are just untrusted content, and they should go through the same guard as a log line does.
+* **Cross-agent containment** — one agent's message to another is untrusted content exactly like a log line is, and it should go through the same guard. A fleet where agents can steer each other has a hole the tool path alone does not close.
 * **Replayable scoring** — constrained decoding is stable in practice, not deterministic by construction, so an auditor cannot re-derive a score months later. I want the ledger to hold a recomputable assessment, not just a recorded one.
 * **A reduced-privilege identity for the public deployment** — it currently shares a service account with the private one. The authorization boundary is tight and tested, but least privilege would make that argument twice.
 
@@ -139,8 +129,6 @@ An agent that can't do damage isn't safe. It's idle. The point of a fuse was nev
 * python
 
 ---
-
-**Sources for the inspiration:** [Axios, 21 Jul 2026](https://www.axios.com/2026/07/21/openai-says-hugging-face-breach-caused-by-one-its-models) · [TechCrunch, 21 Jul 2026](https://techcrunch.com/2026/07/21/openai-says-hugging-face-was-breached-by-its-pre-release-models/) · [TechCrunch on OpenAI's official report, 26 Aug 2026](https://techcrunch.com/2026/08/26/openai-releases-its-official-report-on-the-hugging-face-breach/)
 
 *I created this piece of content for the purposes of entering the Google All Things Agentic Hackathon.*
 
