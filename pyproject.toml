@@ -2,7 +2,19 @@
 name = "interlock"
 version = "1.0.0"
 description = "Interlock - an oversight and containment control plane for autonomous agents operating on Google Cloud."
+readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+keywords = ["ai-agents", "agent-safety", "guardrails", "google-adk", "blast-radius", "prompt-injection"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
 dependencies = [
   "google-adk>=1.0.0",
   "google-genai>=1.0.0",
@@ -28,6 +40,10 @@ dependencies = [
   "tenacity>=9.0.0",
   "python-dateutil>=2.9.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/tanwar-div/interlock-agent-control-plane"
+Repository = "https://github.com/tanwar-div/interlock-agent-control-plane"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0", "ruff>=0.6.0"]

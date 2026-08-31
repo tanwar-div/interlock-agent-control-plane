@@ -12,8 +12,21 @@ dependencies = [
   # The scoring engine. Every tool this server exposes works with no cloud
   # project and no credentials, because the deterministic catalogue is the
   # floor; Gemini refines a score when credentials happen to be present.
-  "interlock @ git+https://github.com/tanwar-div/interlock-agent-control-plane.git",
+  "interlock>=1.0.0",
 ]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+]
+
+[project.urls]
+Homepage = "https://github.com/tanwar-div/interlock-agent-control-plane"
+Repository = "https://github.com/tanwar-div/interlock-agent-control-plane"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.3.0", "pytest-asyncio>=0.24.0"]
@@ -24,10 +37,6 @@ interlock-mcp = "interlock_mcp.__main__:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-# The scoring engine is installed straight from the repository rather than PyPI.
-allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["interlock_mcp"]
