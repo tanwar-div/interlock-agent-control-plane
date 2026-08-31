@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from interlock.blastradius.catalog import ActionSpec
-from interlock.common.config import get_settings
+from interlock.common.config import get_settings, model_credentials_available
 from interlock.common.models import ActionProposal, canonical_json, sha256_hex
 
 logger = logging.getLogger(__name__)
@@ -273,6 +273,8 @@ class ModelScorer:
 
     def _get_client(self) -> Any | None:
         if self._client is None:
+            if not model_credentials_available(self._settings):
+                return None
             try:
                 from google import genai
 

@@ -22,7 +22,7 @@ from typing import Any
 import httpx
 
 from interlock.armor.patterns import scan
-from interlock.common.config import get_settings
+from interlock.common.config import get_settings, model_credentials_available
 from interlock.common.models import GuardCategory, GuardVerdict
 
 logger = logging.getLogger(__name__)
@@ -167,6 +167,8 @@ class Guard:
         whichever ambient credentials or env vars happen to be set.
         """
         if self._genai_client is None:
+            if not model_credentials_available(self._settings):
+                return None
             try:
                 from google import genai
 

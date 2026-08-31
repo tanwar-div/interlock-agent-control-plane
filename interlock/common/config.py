@@ -6,6 +6,7 @@ run locally, in Cloud Run, or in a test harness without code changes.
 from __future__ import annotations
 
 import functools
+import os
 from typing import Literal
 
 from pydantic import Field, field_validator
@@ -148,3 +149,22 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Process-wide settings singleton."""
     return Settings()
+
+
+def model_credentials_available(settings: Settings | None = None) -> bool:
+    """Whether a Gemini client has any chance of authenticating.
+
+    Constructing google-genai's client succeeds unconditionally, so a process
+    with no credentials only discovers the problem when it makes a call — and
+    the client's own cleanup then raises, because its async transport was never
+    initialised. That traceback reaches stderr repeatedly and makes a working
+    fallback look like a crash.
+
+    Checking first keeps the common case quiet: someone running the MCP server
+    straight from the package, with no cloud project and no credentials, whose
+    scores are served entirely by the deterministic catalogue.
+    """
+    resolved = settings or get_settings()
+    if resolved.project_id:
+        return True
+    return bool(os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY"))
