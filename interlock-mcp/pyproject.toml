@@ -12,7 +12,7 @@ dependencies = [
   # The scoring engine. Every tool this server exposes works with no cloud
   # project and no credentials, because the deterministic catalogue is the
   # floor; Gemini refines a score when credentials happen to be present.
-  "interlock>=1.0.0",
+  "interlock-control-plane>=1.0.0",
 ]
 
 classifiers = [

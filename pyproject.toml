@@ -1,5 +1,5 @@
 [project]
-name = "interlock"
+name = "interlock-control-plane"
 version = "1.0.0"
 description = "Interlock - an oversight and containment control plane for autonomous agents operating on Google Cloud."
 readme = "README.md"
