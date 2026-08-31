@@ -1,6 +1,6 @@
 [project]
 name = "interlock-control-plane"
-version = "1.0.0"
+version = "1.0.1"
 description = "Interlock - an oversight and containment control plane for autonomous agents operating on Google Cloud."
 readme = "README.md"
 requires-python = ">=3.11"

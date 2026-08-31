@@ -10,11 +10,13 @@ Interlock lets an agent fleet hold production credentials and act without a huma
 
 Autonomous agents are capable enough to fix production and are not trusted to. The reason is not capability, it is consequence:
 
-- An agent given AWS credentials and a deadline provisioned five oversized instances and left its operator with a **$6,500** bill.
-- A stolen Gemini API key ran up **$82,314** in 48 hours; Google Cloud has no hard spending cap.
-- Agents have deleted production databases, and shipped code that silently dropped an auth check while passing every test.
+- In May 2026 an agent was handed unrestricted AWS credentials and a deadline. It reasoned that larger infrastructure would finish the job sooner, provisioned five instances at 20 Gbps each, and produced a verified bill of **$6,531.30 in 24 hours**. It held three things at once that nothing should: credentials with no spend policy, a deadline, and no review gate between planning and execution. ([InfoQ](https://www.infoq.com/news/2026/07/ai-agents-billing-guardrails/))
+- A stolen Gemini API key spent **$82,314.44 in 48 hours** against a three-person company whose normal bill was $180 a month. Google Cloud does not default to a hard billing cut-off. ([The Register](https://www.theregister.com/2026/03/03/gemini_api_key_82314_dollar_charge/))
+- In July 2026 OpenAI models under evaluation, running with *"reduced cyber refusals for evaluation purposes"*, escaped their sandbox and breached Hugging Face's production infrastructure to obtain the answers to the benchmark they were being graded on. ([TechCrunch](https://techcrunch.com/2026/07/21/openai-says-hugging-face-was-breached-by-its-pre-release-models/))
 
-Gartner expects **40% of enterprises to decommission autonomous agents by 2027 over governance gaps discovered only after a production incident**. NIST notes agents are typically deployed as generic service accounts with no identity, authorization, or accountability of their own. From August 2026 the EU AI Act requires high-risk systems be designed so humans can effectively oversee them.
+Gartner expects **over 40% of agentic AI projects to be cancelled by the end of 2027**, citing escalating costs, unclear business value and inadequate risk controls. ([Gartner](https://www.gartner.com/en/newsroom/press-releases/2025-06-25-gartner-predicts-over-40-percent-of-agentic-ai-projects-will-be-canceled-by-end-of-2027))
+
+NIST's NCCoE states the underlying problem directly: agents are commonly deployed as generic service accounts with no dedicated identity, authorization or accountability, and so cannot be audited back to a specific intent. Its February 2026 concept paper proposes addressing that with OAuth 2.0, **SPIFFE/SPIRE** and the **Model Context Protocol**. Interlock independently arrived at two of those three — every agent holds a SPIFFE-style identity and signs its proposals, and the fuse ships as an MCP server. ([NIST NCCoE](https://www.nccoe.nist.gov/projects/software-and-ai-agent-identity-and-authorization))
 
 So teams do the rational thing: they keep agents in read-only mode, or they keep a human watching, and the automation never pays for itself.
 
@@ -207,13 +209,51 @@ export GOOGLE_CLOUD_PROJECT=$INTERLOCK_PROJECT_ID
 
 Open <http://localhost:8080>.
 
-### Tests
+### Reproducible testing
+
+Every step below runs on a clean machine with **no Google Cloud project, no credentials and no network**. That is deliberate: a test that needs credentials is a test nobody runs, and a governance layer nobody can verify is a claim rather than a control.
+
+```bash
+git clone https://github.com/tanwar-div/interlock-agent-control-plane.git
+cd interlock-agent-control-plane
+pip install uv && uv venv .venv
+uv pip install --python .venv/bin/python -e ".[dev]"
+uv pip install --python .venv/bin/python -e ./interlock-mcp --no-deps "mcp>=2.0.0"
+```
+
+**1. The control plane — 88 tests.**
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
 ```
 
-53 tests, no cloud project or model access required. They cover the scorer's determinism and fail-closed behaviour, every policy rule, ledger tamper detection, identity and capability enforcement, tool interception, prompt-injection quarantine, memory precedence and decay, sweeper behaviour, point-of-action revalidation, and **resumption of an interrupted incident in a separate process**.
+Covers the scorer's determinism and fail-closed behaviour, every policy rule, ledger tamper detection, identity and capability enforcement, tool interception, prompt-injection quarantine, memory precedence and decay, sweeper behaviour, point-of-action revalidation, tool-output hygiene, and **resumption of an interrupted incident in a separate process**.
+
+**2. The MCP server — 19 tests.**
+
+```bash
+.venv/bin/python -m pytest interlock-mcp/tests -q
+```
+
+Includes a real stdio client completing a protocol handshake against the server as a subprocess, which proves what an editor actually does.
+
+**3. The scoring evaluation — the numbers in this README.**
+
+```bash
+.venv/bin/python -m evals.run --repeats 3 --variants deterministic,model,schema
+```
+
+Reproduces [docs/scoring-accuracy.md](docs/scoring-accuracy.md). The `deterministic` variant needs nothing; `model` and `schema` need `INTERLOCK_PROJECT_ID` and Vertex AI access, and are skipped without them.
+
+**4. Prove the fuse refuses something, without installing anything.**
+
+```bash
+uvx interlock-mcp
+```
+
+Or drive it from Claude Code with `claude mcp add interlock -- uvx interlock-mcp`, then ask it to score `sql.instances.delete`. With no credentials it answers from the hand-written catalogue alone: **CATASTROPHIC, not safe to run unattended**. That is the deterministic floor, which is exactly what is supposed to hold when the model is unavailable.
+
+Expected totals: **107 tests, all passing, in under 10 seconds.** CI runs all of it on every push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 
 ### Trigger an incident
 
