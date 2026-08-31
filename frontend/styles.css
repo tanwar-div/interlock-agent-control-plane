@@ -211,7 +211,7 @@ h1{min-height:auto}
 .video-frame{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;
   border:1px solid var(--line);background:#05070a;
   box-shadow:0 24px 60px -24px rgba(0,0,0,.9)}
-.video-frame video{width:100%;height:100%;object-fit:cover;display:block;background:#05070a}
+.video-frame video,.video-frame img{width:100%;height:100%;object-fit:cover;display:block;background:#05070a}
 .video-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:8px;text-align:center;padding:30px;
   background:radial-gradient(560px 300px at 50% 42%,rgba(91,156,255,.07),transparent 70%)}

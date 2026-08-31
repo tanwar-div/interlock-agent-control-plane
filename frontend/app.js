@@ -317,14 +317,13 @@ function initVideo() {
   const v = $("#demo-video"), ph = $("#video-placeholder");
   if (!v || !ph) return;
   const reveal = () => { ph.style.display = "none"; };
+  // An <img> fires 'load'; a <video> fires 'loadeddata'/'canplay'. Listen for
+  // all three so the placeholder lifts whichever element is in the frame.
+  v.addEventListener("load", reveal);
   v.addEventListener("loadeddata", reveal);
   v.addEventListener("canplay", reveal);
   v.addEventListener("error", () => { v.style.display = "none"; }, true);
-  ph.addEventListener("click", () => v.play().catch(() => {}));
-  // A source that 404s never fires 'error' on the element itself in some
-  // browsers, so check the source too.
-  const src = v.querySelector("source");
-  src?.addEventListener("error", () => { v.style.display = "none"; });
+  if (v.complete && v.naturalWidth) reveal();  // cached: 'load' already fired
 }
 
 /* ── connection ──────────────────────────────────────────────────────── */
