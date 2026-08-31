@@ -440,6 +440,38 @@ def create_compute_instances(
     }
 
 
+def describe_sql_instance(*, instance: str) -> dict[str, Any]:
+    """Describe a Cloud SQL instance: state, tier, backups and replication.
+
+    Read-only, so the investigator can establish what a database actually is
+    before anything proposes changing it. A remediation that assumes a replica
+    exists, or that automated backups are on, is a remediation built on a guess.
+    """
+    import googleapiclient.discovery  # type: ignore[import-untyped]
+
+    project = _project()
+    try:
+        service = googleapiclient.discovery.build("sqladmin", "v1beta4", cache_discovery=False)
+        found = service.instances().get(project=project, instance=instance).execute()
+    except Exception as exc:
+        raise CloudError(f"could not describe database '{instance}': {exc}") from exc
+
+    settings = found.get("settings") or {}
+    backup = settings.get("backupConfiguration") or {}
+    return {
+        "instance": instance,
+        "state": found.get("state", ""),
+        "database_version": found.get("databaseVersion", ""),
+        "tier": settings.get("tier", ""),
+        "region": found.get("region", ""),
+        "availability_type": settings.get("availabilityType", ""),
+        "backups_enabled": bool(backup.get("enabled")),
+        "point_in_time_recovery": bool(backup.get("pointInTimeRecoveryEnabled")),
+        "deletion_protection": bool(settings.get("deletionProtectionEnabled")),
+        "replica_names": list(found.get("replicaNames") or []),
+    }
+
+
 def create_sql_backup(*, instance: str) -> dict[str, Any]:
     """Take an on-demand Cloud SQL backup."""
     import googleapiclient.discovery  # type: ignore[import-untyped]

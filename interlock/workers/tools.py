@@ -99,6 +99,25 @@ async def inspect_service(service: str, tool_context: ToolContext | None = None)
 
 
 @governed(
+    action_type="sql.instances.get",
+    summary="Describe a Cloud SQL instance",
+    target_param="instance",
+)
+async def inspect_database(
+    instance: str, tool_context: ToolContext | None = None
+) -> dict[str, Any]:
+    """Describe a Cloud SQL instance: state, tier, backups, replicas.
+
+    Args:
+        instance: Cloud SQL instance id.
+    """
+    try:
+        return {"ok": True, **cloud.describe_sql_instance(instance=instance)}
+    except Exception as exc:
+        return _fail(exc)
+
+
+@governed(
     action_type="run.revisions.list",
     summary="List revisions of a Cloud Run service",
     target_param="service",
@@ -338,7 +357,13 @@ async def resolve_incident(summary: str, tool_context: ToolContext | None = None
 
 
 # Tool groupings used when constructing the fleet.
-INVESTIGATION_TOOLS = [investigate_logs, investigate_metrics, inspect_service, inspect_revisions]
+INVESTIGATION_TOOLS = [
+    investigate_logs,
+    investigate_metrics,
+    inspect_service,
+    inspect_revisions,
+    inspect_database,
+]
 REMEDIATION_TOOLS = [
     rollback_to_revision,
     shift_service_traffic,

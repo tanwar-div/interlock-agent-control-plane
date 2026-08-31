@@ -45,6 +45,19 @@ class Settings(BaseSettings):
     # arguments, and never sees the proposing agent's reasoning.
     scoring_model: str = Field(default="gemini-3.5-flash")
     model_scoring_enabled: bool = Field(default=True)
+    # Memories are deduplicated by meaning rather than by exact string, so a
+    # repeated observation reinforces one record instead of creating a second.
+    memory_embedding_model: str = Field(default="gemini-embedding-001")
+    memory_embeddings_enabled: bool = Field(default=True)
+    # Measured, not guessed. Against gemini-embedding-001 at 768 dimensions,
+    # genuine paraphrases of the same fact scored 0.826-0.966, and different
+    # facts about the same service scored 0.605-0.754. 0.80 sits in that gap.
+    #
+    # The margin is narrow, and it only exists because matching is scoped to
+    # one service and one kind. Unscoped, the same fault text on two different
+    # services scores 0.905 — higher than a real paraphrase — and no threshold
+    # separates the classes at all. The scoping is load-bearing, not tidiness.
+    memory_similarity_threshold: float = Field(default=0.80)
 
     # --- Firestore --------------------------------------------------------
     firestore_database: str = Field(default="(default)")

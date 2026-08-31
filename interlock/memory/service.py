@@ -33,6 +33,7 @@ from google.adk.memory import BaseMemoryService
 from interlock.common.config import get_settings
 from interlock.common.models import new_id, utcnow
 from interlock.common.store import DocumentStore, get_store
+from interlock.memory.embedding import cosine, embed
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,32 @@ class IncidentMemory:
 
     # -- writing -----------------------------------------------------------
 
+    def _match(
+        self, rows: list[dict[str, Any]], summary: str, vector: list[float] | None
+    ) -> dict[str, Any] | None:
+        """Find the memory this observation restates, if any.
+
+        Exact equality first: it is free, and an identical string is identical
+        regardless of what any model thinks. Similarity is consulted only when
+        an embedding was produced for both sides, so a memory written while the
+        embedding model was unreachable still matches later by string.
+        """
+        for row in rows:
+            if row.get("summary") == summary:
+                return row
+        if not vector:
+            return None
+        threshold = self._settings.memory_similarity_threshold
+        best: dict[str, Any] | None = None
+        best_score = threshold
+        for row in rows:
+            score = cosine(vector, row.get("embedding"))
+            if score >= best_score:
+                best, best_score = row, score
+        if best is not None:
+            logger.debug("memory matched semantically at %.3f", best_score)
+        return best
+
     async def remember(
         self,
         *,
@@ -95,11 +122,15 @@ class IncidentMemory:
         candidates = await self._store.query(
             self._collection, where=[("service", "==", service)]
         )
-        existing = [
-            r for r in candidates if r.get("kind") == kind and r.get("summary") == summary
-        ]
+        same_kind = [r for r in candidates if r.get("kind") == kind]
+
+        # Deduplicate by meaning, not by punctuation. Two operators describing
+        # the same refusal in different words should reinforce one memory, not
+        # create a second that dilutes the brief.
+        vector = await embed(summary)
+        existing = self._match(same_kind, summary, vector)
         if existing:
-            record = existing[0]
+            record = existing
             record["occurrences"] = int(record.get("occurrences", 1)) + 1
             record["last_seen"] = utcnow().isoformat()
             record["weight"] = float(record.get("weight", 1.0)) + weight
@@ -108,6 +139,8 @@ class IncidentMemory:
                 if incident_id not in incidents:
                     incidents.append(incident_id)
                 record["incidents"] = incidents[-20:]
+            if vector and not record.get("embedding"):
+                record["embedding"] = vector
             await self._store.put(self._collection, record["memory_id"], record)
             logger.debug("reinforced memory for %s (x%d)", service, record["occurrences"])
             return record
@@ -124,6 +157,8 @@ class IncidentMemory:
             "created_at": utcnow().isoformat(),
             "last_seen": utcnow().isoformat(),
         }
+        if vector:
+            record["embedding"] = vector
         await self._store.put(self._collection, record["memory_id"], record)
         logger.info("remembered %s for %s: %s", kind, service, summary[:80])
         return record
