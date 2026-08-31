@@ -36,6 +36,7 @@ from interlock.common.telemetry import (
     configure_telemetry,
     instrument_fastapi,
 )
+from interlock.gateway import auth
 from interlock.identity.registry import AgentRegistry
 from interlock.ledger.ledger import Ledger
 from interlock.memory.service import IncidentMemory
@@ -53,6 +54,9 @@ app = FastAPI(
     description="Oversight and containment control plane for autonomous agents.",
 )
 instrument_fastapi(app)
+# Deny-by-default authorization. A no-op unless the public read-only face is
+# switched on, so the private deployment behaves exactly as it did before.
+auth.install(app)
 
 settings = get_settings()
 orchestrator = IncidentOrchestrator()

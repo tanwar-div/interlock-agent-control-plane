@@ -157,8 +157,8 @@ Because each phase is a separate Pub/Sub message, no request holds a connection 
 |---|---|
 | Gemini 3.5 | **Gemini 3.5 Flash** for reasoning and audit, via Vertex AI / Gemini API |
 | Google agent framework | **Agent Development Kit** — `LlmAgent`, `Runner`, `BasePlugin`, `ToolContext` |
-| Google Cloud services | **Cloud Run**, **Firestore**, **Pub/Sub**, Cloud Logging, Cloud Monitoring, Cloud Trace, Secret Manager, **Model Armor** |
-| Additional Google model | **Gemma** as the independent guard classifier |
+| Google Cloud services | **Cloud Run**, **Firestore**, **Pub/Sub**, **Cloud SQL**, Cloud Logging, Cloud Monitoring, Cloud Trace, Secret Manager, Cloud IAM, **Model Armor** |
+| Additional Google models | **Gemma 4 26B** as the independent guard classifier; **gemini-embedding-001** for memory deduplication |
 | Risk assessment | **Gemini 3.5 Flash**, schema-constrained, stateless per action |
 | Autonomy | **Cloud Scheduler** heartbeat driving the sweeper |
 
@@ -221,13 +221,13 @@ uv pip install --python .venv/bin/python -e ".[dev]"
 uv pip install --python .venv/bin/python -e ./interlock-mcp --no-deps "mcp>=2.0.0"
 ```
 
-**1. The control plane — 88 tests.**
+**1. The control plane — 96 tests.**
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
 ```
 
-Covers the scorer's determinism and fail-closed behaviour, every policy rule, ledger tamper detection, identity and capability enforcement, tool interception, prompt-injection quarantine, memory precedence and decay, sweeper behaviour, point-of-action revalidation, tool-output hygiene, and **resumption of an interrupted incident in a separate process**.
+Covers the scorer's determinism and fail-closed behaviour, every policy rule, ledger tamper detection, identity and capability enforcement, tool interception, prompt-injection quarantine, memory precedence, decay and semantic deduplication, sweeper behaviour, point-of-action revalidation, tool-output hygiene, and **resumption of an interrupted incident in a separate process**.
 
 **2. The MCP server — 19 tests.**
 
@@ -253,7 +253,7 @@ uvx interlock-mcp
 
 Or drive it from Claude Code with `claude mcp add interlock -- uvx interlock-mcp`, then ask it to score `sql.instances.delete`. With no credentials it answers from the hand-written catalogue alone: **CATASTROPHIC, not safe to run unattended**. That is the deterministic floor, which is exactly what is supposed to hold when the model is unavailable.
 
-Expected totals: **107 tests, all passing, in under 10 seconds.** CI runs all of it on every push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
+Expected totals: **115 tests, all passing, in under 10 seconds.** CI runs all of it on every push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 
 ### Trigger an incident
 

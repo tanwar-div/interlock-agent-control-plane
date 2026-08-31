@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     # separates the classes at all. The scoping is load-bearing, not tidiness.
     memory_similarity_threshold: float = Field(default=0.80)
 
+    # --- Public read-only face --------------------------------------------
+    # Off by default: enabling it is a deployment decision, because it only
+    # makes sense when the Cloud Run IAM boundary has been opened as well.
+    public_readonly_enabled: bool = Field(default=False)
+    # Shared secret for everything that is not public. Empty means every
+    # protected route refuses, which is the safe way to be misconfigured.
+    admin_token: str = Field(default="")
+    public_rate_limit: int = Field(default=30)
+    public_rate_window_seconds: int = Field(default=60)
+
     # --- Firestore --------------------------------------------------------
     firestore_database: str = Field(default="(default)")
     collection_incidents: str = Field(default="incidents")
