@@ -162,6 +162,34 @@ Because each phase is a separate Pub/Sub message, no request holds a connection 
 | Risk assessment | **Gemini 3.5 Flash**, schema-constrained, stateless per action |
 | Autonomy | **Cloud Scheduler** heartbeat driving the sweeper |
 
+### Try it without installing anything
+
+**<https://interlock-public-610063873432.us-central1.run.app>**
+
+Pick an action, watch it get scored and refused. It is the same scorer and the same policy engine that run in production, not a mock.
+
+```bash
+curl -s -X POST https://interlock-public-610063873432.us-central1.run.app/v1/simulate \
+  -H 'Content-Type: application/json' \
+  -d '{"action_type":"sql.instances.delete","target":"interlock-orders",
+       "parameters":{"instance":"interlock-orders"}}'
+```
+
+```
+severity : CATASTROPHIC (100.0)      decision : DENY
+  - agent is not entitled to 'sql.instances.delete'
+  - irreversible action with high data-loss risk is never executed autonomously
+```
+
+Worth trying both of these, because the difference is the point:
+
+| request | verdict |
+|---|---|
+| `run.services.rollback` with `revision` named | NEGLIGIBLE 10.5 — **ALLOW** |
+| `run.services.rollback` with no revision | MODERATE 33.0 — **REQUIRE_APPROVAL** |
+
+Roll back to *what*? An unspecified rollback is a different action from a specified one, and the assessor prices it accordingly. Both verdicts are stable across repeated calls.
+
 ### The public read-only face
 
 A governance layer nobody can inspect is a claim rather than a control, so part of the surface is readable without credentials:
