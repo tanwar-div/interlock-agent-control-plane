@@ -38,16 +38,20 @@ async function type(el, text, { speed = 26, startDelay = 0, beats = BEATS } = {}
   el.classList.remove("caret");
 }
 
-/* The chat is paced off reading speed and then run 1.6x quicker, so it stays
+/* The chat is paced off reading speed and then run 3.2x quicker, so it stays
  * legible without holding the scene up. Average adult silent reading is about
  * 240 words per minute and an English word is ~5.7 characters counting the
- * space after it, which puts the eye at ~44ms per character; hurried, ~26ms.
+ * space after it, which puts the eye at ~44ms per character; hurried, ~13ms.
  * The pauses at commas and full stops are paid for out of a slightly quicker
  * base, so the average over a whole message lands on that rate rather than
- * above it. */
+ * above it.
+ *
+ * Haste scales the base interval, and every beat below is a multiple of it,
+ * so raising it shortens the punctuation pauses in proportion rather than
+ * leaving them behind at the old length. */
 const READING_WPM = 240;
 const CHARS_PER_WORD = 5.7;
-const CHAT_HASTE = 1.6;
+const CHAT_HASTE = 3.2;
 const CHAT_BEATS = { newline: 6, sentence: 4.5, clause: 2.4, space: 0.7 };
 const CHAT_SPEED = 60000 / (READING_WPM * CHARS_PER_WORD) / 1.07 / CHAT_HASTE;
 
