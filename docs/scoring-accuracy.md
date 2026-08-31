@@ -41,6 +41,30 @@ python -m evals.run --repeats 3 --variants deterministic,model,schema
 
 The schema result held over 102 evaluations with zero unstable cases.
 
+### Re-measured, 31 August 2026
+
+The table above was recorded once. Re-running it is the only way to know whether
+it still describes the system, so it was re-run on the deployed configuration.
+
+| variant | verdict acc | stability | unsafe | over-cautious | adversarial |
+|---|---|---|---|---|---|
+| deterministic heuristics | 88.2% | 100.0% | 0 | 0 | 6/9 |
+| model, JSON mime type only | 92.2% | 94.1% | 0 | 5 | 9/9 |
+| **model, schema-constrained** | **100.0%** | **100.0%** | **0** | **0** | **9/9** |
+
+Adversarial is 9 rather than 18 only because this run used 3 repeats where the
+original used 6; it is the same 3 cases, caught every time.
+
+The schema row reproduced exactly. The deterministic row reproduced exactly,
+which it must, being deterministic.
+
+The unconstrained model row did not: 92.2% against 94.1%, five over-cautious
+verdicts against three, three unstable cases against two. That is not a
+regression to investigate — it is the variance the row exists to demonstrate,
+showing up again on a second measurement. A number that moves when you measure
+it twice is the finding. It is also why the row directly beneath it, which does
+not move, is the one in production.
+
 ## What the numbers say
 
 **The heuristics are not the safest option, only the most predictable one.**
