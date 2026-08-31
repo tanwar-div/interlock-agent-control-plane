@@ -93,6 +93,58 @@ Expected totals: **132 tests, under 10 seconds.** CI runs all of it on every pus
 
 ---
 
+## Running the MCP server
+
+The fuse is published on PyPI as [`interlock-mcp`](https://pypi.org/project/interlock-mcp/), so any MCP client can install it. It needs no cloud project, no credentials and no network — without them it answers from the hand-written catalogue, which is the floor that holds when the model is unavailable.
+
+**Claude Code**
+
+```bash
+claude mcp add interlock -- uvx interlock-mcp
+```
+
+**Cursor, Claude Desktop, or any other MCP client** — add to the client's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "interlock": {
+      "command": "uvx",
+      "args": ["interlock-mcp"]
+    }
+  }
+}
+```
+
+**Run it directly**, to see the raw protocol:
+
+```bash
+uvx interlock-mcp
+```
+
+### What it exposes
+
+| Tool | Ask it |
+|---|---|
+| `score_action` | Is this one action safe to take? Pass the operation and its literal arguments |
+| `check_plan` | Is this whole sequence safe? Judged together, so a plan is refused before its harmless first half runs |
+| `inspect_content` | Is this text trying to steer me? Call it on logs, tickets, issue bodies, web pages |
+
+Three resources — `interlock://catalogue`, `interlock://policy`, `interlock://severity` — expose the 32 scored actions, the 11 policy rules in evaluation order, and the severity bands. One prompt, `before_you_act`, tells a calling model when to reach for any of it.
+
+### With and without credentials
+
+Set `INTERLOCK_PROJECT_ID` and authenticate to Vertex AI, and scoring runs through Gemini with the catalogue as its floor, and content inspection adds Model Armor and the Gemma classifier on top of the local patterns. The response says which happened:
+
+| `assessed_by` | Meaning |
+|---|---|
+| `model+floor` | Gemini scored it, bounded below by the catalogue |
+| `deterministic-fallback` | no credentials, rate limited, or the model failed — catalogue only |
+
+Either way an uncatalogued action scores CATASTROPHIC, because unknown means dangerous rather than fine.
+
+---
+
 ## What it does
 
 Interlock installs as a Google ADK `BasePlugin`. Every tool call is intercepted before it executes and must clear six stages:
