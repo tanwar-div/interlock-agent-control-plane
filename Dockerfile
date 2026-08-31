@@ -14,6 +14,10 @@ COPY pyproject.toml README.md ./
 COPY interlock ./interlock
 RUN pip install --no-cache-dir .
 
+# The project site. Served at / only by the public read-only deployment; the
+# private one serves the operator console there instead.
+COPY frontend ./frontend
+
 # Cloud Run injects PORT; default keeps local runs identical to deployed ones.
 ENV PORT=8080
 EXPOSE 8080

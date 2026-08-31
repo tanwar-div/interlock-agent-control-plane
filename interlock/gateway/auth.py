@@ -42,6 +42,15 @@ PUBLIC_POST = frozenset({"/v1/simulate"})
 
 _PREFIX_ALLOW = ("/static/", "/assets/", "/docs", "/openapi.json", "/redoc")
 
+# The project site references its assets relatively, so they are served from the
+# root alongside the API. Extensions rather than paths, because the site is a
+# directory of files rather than a fixed list. Nothing under /v1 ends in any of
+# these, so no API route can be reached through this.
+_STATIC_SUFFIXES = (
+    ".css", ".js", ".mjs", ".map", ".png", ".jpg", ".jpeg", ".svg", ".gif",
+    ".ico", ".webp", ".woff", ".woff2", ".ttf", ".mp4", ".webm", ".txt",
+)
+
 
 class _RateLimiter:
     """Fixed-window limiter, per client, in process.
@@ -81,6 +90,8 @@ def _is_public(method: str, path: str) -> bool:
     if any(path.startswith(prefix) for prefix in _PREFIX_ALLOW):
         return True
     if method in ("GET", "HEAD"):
+        if path.lower().endswith(_STATIC_SUFFIXES):
+            return True
         return path in PUBLIC_GET
     if method == "POST":
         return path in PUBLIC_POST

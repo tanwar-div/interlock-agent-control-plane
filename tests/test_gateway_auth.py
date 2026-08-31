@@ -125,3 +125,32 @@ def test_public_reads_are_not_rate_limited(build):
     client = build(public_readonly_enabled=True, admin_token="s3cret",
                    public_rate_limit=2, public_rate_window_seconds=60)
     assert all(client.get("/v1/catalog").status_code == 200 for _ in range(6))
+
+
+def test_site_assets_are_reachable_without_credentials(build):
+    """The public deployment serves the project site from the root, and the
+    site asks for its own stylesheet and script relatively. If those are
+    refused the page renders unstyled and inert, which reads as a broken
+    server rather than a protected one."""
+    client = build(public_readonly_enabled=True, admin_token="s3cret")
+
+    app = client.app
+
+    @app.get("/styles.css")
+    async def styles():
+        return "body{}"
+
+    @app.get("/app.js")
+    async def script():
+        return "console.log(1)"
+
+    assert client.get("/styles.css").status_code == 200
+    assert client.get("/app.js").status_code == 200
+
+
+def test_a_static_looking_suffix_cannot_reach_a_protected_route(build):
+    """The suffix allowance must not become a way in. No API route ends in a
+    static extension, so a protected path is still protected."""
+    client = build(public_readonly_enabled=True, admin_token="s3cret")
+    assert client.get("/v1/incidents").status_code == 401
+    assert client.post("/v1/alerts").status_code == 401

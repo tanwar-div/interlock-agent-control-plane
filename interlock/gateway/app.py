@@ -474,9 +474,33 @@ async def describe_policy() -> dict[str, Any]:
 # Console
 # ---------------------------------------------------------------------------
 
+SITE_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
+
 if CONSOLE_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(CONSOLE_DIR)), name="static")
 
-    @app.get("/", include_in_schema=False)
+    @app.get("/console", include_in_schema=False)
     async def console() -> FileResponse:
         return FileResponse(str(CONSOLE_DIR / "index.html"))
+
+# What "/" serves depends on who can reach the deployment.
+#
+# The private deployment answers to operators, so it serves the console, which
+# reads incidents, approvals and memory. On the public deployment those routes
+# refuse an anonymous caller by design, so a console there would render itself
+# half broken and blame the server. The public deployment serves the project
+# site instead, which asks only for the routes that are public.
+_PUBLIC_SITE = get_settings().public_readonly_enabled and (SITE_DIR / "index.html").exists()
+
+if not _PUBLIC_SITE and CONSOLE_DIR.exists():
+
+    @app.get("/", include_in_schema=False)
+    async def root_console() -> FileResponse:
+        return FileResponse(str(CONSOLE_DIR / "index.html"))
+
+if _PUBLIC_SITE:
+    # Mounted at the root, and registered last so that every API route above
+    # still matches first. The site references its assets relatively
+    # (`styles.css`, `app.js`), so they have to resolve from / rather than from
+    # a prefix; html=True is what makes / return index.html.
+    app.mount("/", StaticFiles(directory=str(SITE_DIR), html=True), name="site")
