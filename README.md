@@ -52,7 +52,7 @@ uv pip install --python .venv/bin/python -e ./interlock-mcp --no-deps
 uv pip install --python .venv/bin/python "mcp>=2.0.0"
 ```
 
-**1. The control plane — 111 tests.**
+**1. The control plane — 113 tests.**
 
 ```bash
 .venv/bin/python -m pytest tests/ -q
@@ -89,7 +89,7 @@ claude mcp add interlock -- uvx interlock-mcp
 
 Ask it to score `sql.instances.delete`. With no credentials it answers from the hand-written catalogue alone: **CATASTROPHIC, not safe to run unattended**.
 
-Expected totals: **130 tests, under 10 seconds.** CI runs all of it on every push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
+Expected totals: **132 tests, under 10 seconds.** CI runs all of it on every push ([.github/workflows/tests.yml](.github/workflows/tests.yml)).
 
 ---
 
